@@ -1,0 +1,13 @@
+import { redirect } from 'next/navigation'
+import { auth } from '@/lib/auth'
+import { DashboardShell } from '@/components/layout/DashboardShell'
+
+export default async function ManagerLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const session = await auth()
+  if (!session) redirect('/login')
+  return <DashboardShell>{children}</DashboardShell>
+}

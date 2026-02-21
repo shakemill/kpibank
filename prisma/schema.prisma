@@ -1,0 +1,402 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  DG
+  DIRECTEUR
+  CHEF_SERVICE
+  MANAGER
+  EMPLOYE
+}
+
+enum TypePeriode {
+  MENSUEL
+  TRIMESTRIEL
+  SEMESTRIEL
+}
+
+enum StatutPeriode {
+  A_VENIR
+  EN_COURS
+  CLOTUREE
+}
+
+enum TypeKpi {
+  QUANTITATIF
+  QUALITATIF
+  COMPORTEMENTAL
+}
+
+enum ModeAgregation {
+  CUMUL
+  MOYENNE
+  DERNIER
+}
+
+enum StatutKpi {
+  DRAFT
+  ACTIF
+  CLOTURE
+}
+
+enum StatutKpiEmploye {
+  DRAFT
+  NOTIFIE
+  ACCEPTE
+  CONTESTE
+  MAINTENU
+  REVISE
+  VALIDE
+  CLOTURE
+}
+
+enum StatutSaisie {
+  OUVERTE
+  EN_RETARD
+  SOUMISE
+  VALIDEE
+  REJETEE
+  AJUSTEE
+  MANQUANTE
+  VERROUILLEE
+}
+
+enum TypeNotification {
+  RAPPEL_SAISIE
+  SAISIE_EN_RETARD
+  SAISIE_SOUMISE
+  VALIDATION_REQUISE
+  KPI_NOTIFIE
+  KPI_CONTESTE
+  KPI_MAINTENU
+  KPI_REVISE
+  PERIODE_CLOTUREE
+}
+
+// ---------------------------------------------------------------------------
+// Organisation
+// ---------------------------------------------------------------------------
+
+model Etablissement {
+  id        Int         @id @default(autoincrement())
+  nom       String
+  logo      String?
+  actif     Boolean     @default(true)
+  directions Direction[]
+}
+
+model Direction {
+  id              Int      @id @default(autoincrement())
+  nom             String
+  code            String
+  description     String?
+  actif           Boolean  @default(true)
+  etablissementId Int
+  responsableId   Int?
+  etablissement   Etablissement @relation(fields: [etablissementId], references: [id], onDelete: Cascade)
+  responsable     User?    @relation("DirectionResponsable", fields: [responsableId], references: [id], onDelete: SetNull)
+  users           User[]   @relation("UserDirection")
+  services        Service[]
+  kpiDirections  KpiDirection[]
+  consolidationsDirection ConsolidationDirection[]
+}
+
+model Service {
+  id            Int      @id @default(autoincrement())
+  nom           String
+  code          String
+  description   String?
+  actif         Boolean  @default(true)
+  directionId   Int
+  responsableId Int?
+  direction     Direction @relation(fields: [directionId], references: [id], onDelete: Cascade)
+  responsable   User?    @relation("ServiceResponsable", fields: [responsableId], references: [id], onDelete: SetNull)
+  employes      User[]   @relation("ServiceEmployes")
+  kpiServices   KpiService[]
+  consolidationsService ConsolidationService[]
+}
+
+// ---------------------------------------------------------------------------
+// Utilisateurs & rôles
+// ---------------------------------------------------------------------------
+
+model User {
+  id                   Int       @id @default(autoincrement())
+  nom                  String
+  prenom               String
+  email                String    @unique
+  password             String
+  telephone            String?
+  role                 Role
+  actif                Boolean   @default(true)
+  force_password_change Boolean  @default(false)
+  emailVerified        DateTime?
+  image                String?
+  serviceId     Int?
+  directionId   Int?
+  managerId     Int?
+  service       Service?  @relation("ServiceEmployes", fields: [serviceId], references: [id], onDelete: SetNull)
+  direction     Direction? @relation("UserDirection", fields: [directionId], references: [id], onDelete: SetNull)
+  manager       User?     @relation("Hierarchie", fields: [managerId], references: [id], onDelete: SetNull)
+  collaborateurs User[]   @relation("Hierarchie")
+  directionsResponsable Direction[] @relation("DirectionResponsable")
+  servicesResponsable   Service[]   @relation("ServiceResponsable")
+  kpiEmployesAssignes  KpiEmploye[] @relation("KpiEmployeAssignePar")
+  kpiEmployesAsEmploye  KpiEmploye[] @relation("KpiEmployeEmploye")
+  saisiesMensuelles    SaisieMensuelle[]
+  kpiDirectionsCrees   KpiDirection[]
+  kpiServicesCrees     KpiService[]
+  saisiesValidees      SaisieMensuelle[] @relation("SaisieValidePar")
+  parametresModifies   Parametre[]
+  notifications        Notification[]
+  accounts             Account[]
+  sessions             Session[]
+}
+
+// ---------------------------------------------------------------------------
+// Périodes
+// ---------------------------------------------------------------------------
+
+model Periode {
+  id                  Int      @id @default(autoincrement())
+  type                TypePeriode
+  code                String
+  mois_debut          Int
+  mois_fin            Int
+  annee               Int
+  date_debut          DateTime
+  date_fin            DateTime
+  date_limite_saisie  DateTime
+  statut              StatutPeriode
+  actif               Boolean  @default(true)
+  kpiDirections       KpiDirection[]
+  kpiServices         KpiService[]
+  kpiEmployes         KpiEmploye[]
+  scorePeriodes       ScorePeriode[]
+  consolidationsService   ConsolidationService[]
+  consolidationsDirection ConsolidationDirection[]
+}
+
+// ---------------------------------------------------------------------------
+// Catalogue KPI
+// ---------------------------------------------------------------------------
+
+model CatalogueKpi {
+  id               Int      @id @default(autoincrement())
+  nom              String
+  description      String?
+  type             TypeKpi
+  unite            String?
+  mode_agregation  ModeAgregation
+  actif            Boolean  @default(true)
+  kpiDirections    KpiDirection[]
+  kpiServices      KpiService[]
+  kpiEmployes      KpiEmploye[]
+}
+
+// ---------------------------------------------------------------------------
+// KPI Direction / Service / Employé
+// ---------------------------------------------------------------------------
+
+model KpiDirection {
+  id                       Int      @id @default(autoincrement())
+  catalogueKpiId            Int
+  directionId               Int
+  periodeId                 Int
+  cible                     Float
+  poids                     Float
+  description_complementaire String?
+  statut                    StatutKpi
+  creeParId                 Int
+  catalogueKpi              CatalogueKpi @relation(fields: [catalogueKpiId], references: [id], onDelete: Cascade)
+  direction                 Direction    @relation(fields: [directionId], references: [id], onDelete: Cascade)
+  periode                   Periode      @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+  creePar                   User         @relation(fields: [creeParId], references: [id], onDelete: Restrict)
+  kpiServices               KpiService[]
+}
+
+model KpiService {
+  id                   Int      @id @default(autoincrement())
+  catalogueKpiId        Int
+  serviceId            Int
+  periodeId            Int
+  kpiDirectionId       Int?
+  poids_dans_direction Float?
+  cible                Float
+  poids                Float
+  statut               StatutKpi
+  creeParId            Int
+  catalogueKpi         CatalogueKpi @relation(fields: [catalogueKpiId], references: [id], onDelete: Cascade)
+  service             Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  periode             Periode   @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+  kpiDirection        KpiDirection? @relation(fields: [kpiDirectionId], references: [id], onDelete: SetNull)
+  creePar             User      @relation(fields: [creeParId], references: [id], onDelete: Restrict)
+  kpiEmployes         KpiEmploye[]
+}
+
+model KpiEmploye {
+  id                    Int      @id @default(autoincrement())
+  catalogueKpiId        Int
+  employeId             Int
+  assigneParId          Int
+  kpiServiceId          Int?
+  periodeId             Int
+  cible                 Float
+  poids                 Float
+  statut                StatutKpiEmploye
+  date_notification     DateTime?
+  date_acceptation      DateTime?
+  motif_contestation    String?
+  reponse_contestation  String?
+  catalogueKpi          CatalogueKpi @relation(fields: [catalogueKpiId], references: [id], onDelete: Cascade)
+  employe               User     @relation("KpiEmployeEmploye", fields: [employeId], references: [id], onDelete: Cascade)
+  assignePar            User     @relation("KpiEmployeAssignePar", fields: [assigneParId], references: [id], onDelete: Restrict)
+  kpiService            KpiService? @relation(fields: [kpiServiceId], references: [id], onDelete: Cascade)
+  periode               Periode  @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+  saisiesMensuelles     SaisieMensuelle[]
+  scorePeriodes         ScorePeriode[]
+}
+
+// ---------------------------------------------------------------------------
+// Saisies mensuelles
+// ---------------------------------------------------------------------------
+
+model SaisieMensuelle {
+  id               Int      @id @default(autoincrement())
+  kpiEmployeId     Int
+  employeId         Int
+  mois             Int
+  annee            Int
+  valeur_realisee   Float?
+  commentaire      String?
+  preuves          String?
+  statut           StatutSaisie
+  en_retard        Boolean  @default(false)
+  soumis_le        DateTime?
+  valideParId      Int?
+  valide_le        DateTime?
+  valeur_ajustee   Float?
+  motif_ajustement String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  kpiEmploye       KpiEmploye @relation(fields: [kpiEmployeId], references: [id], onDelete: Cascade)
+  employe          User     @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  validePar        User?    @relation("SaisieValidePar", fields: [valideParId], references: [id], onDelete: SetNull)
+  @@unique([kpiEmployeId, mois, annee])
+}
+
+// ---------------------------------------------------------------------------
+// Scores et consolidations
+// ---------------------------------------------------------------------------
+
+model ScorePeriode {
+  id              Int      @id @default(autoincrement())
+  kpiEmployeId    Int
+  periodeId        Int
+  valeur_agregee   Float
+  taux_atteinte   Float
+  calcule_le      DateTime
+  kpiEmploye       KpiEmploye @relation(fields: [kpiEmployeId], references: [id], onDelete: Cascade)
+  periode         Periode   @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+}
+
+model ConsolidationService {
+  id                        Int      @id @default(autoincrement())
+  serviceId                 Int
+  periodeId                 Int
+  taux_atteinte_moyen       Float
+  nb_employes_total         Int
+  nb_employes_objectif_atteint Int
+  calcule_le                DateTime
+  service                   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  periode                   Periode   @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+}
+
+model ConsolidationDirection {
+  id                  Int      @id @default(autoincrement())
+  directionId         Int
+  periodeId           Int
+  taux_atteinte_moyen Float
+  calcule_le          DateTime
+  direction           Direction @relation(fields: [directionId], references: [id], onDelete: Cascade)
+  periode             Periode   @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Paramètres
+// ---------------------------------------------------------------------------
+
+model Parametre {
+  id           Int      @id @default(autoincrement())
+  cle          String   @unique
+  valeur       String
+  description  String?
+  modifieParId Int
+  modifie_le   DateTime
+  modifiePar   User     @relation(fields: [modifieParId], references: [id], onDelete: Restrict)
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id            Int      @id @default(autoincrement())
+  destinataireId Int
+  type          TypeNotification
+  titre         String
+  message       String
+  lu            Boolean  @default(false)
+  lien          String?
+  createdAt     DateTime @default(now())
+  destinataire  User     @relation(fields: [destinataireId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// NextAuth (Prisma Adapter)
+// ---------------------------------------------------------------------------
+
+model Account {
+  id                Int     @id @default(autoincrement())
+  userId            Int
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           Int      @id @default(autoincrement())
+  sessionToken String   @unique
+  userId       Int
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+  @@id([identifier, token])
+}
