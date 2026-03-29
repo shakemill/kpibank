@@ -1,12 +1,9 @@
 import type { NextRequest } from 'next/server'
 import { auth } from '@/lib/auth-middleware'
 
-function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   return auth(request)
 }
-
-export default middleware
-export { middleware }
 
 export const config = {
   matcher: [

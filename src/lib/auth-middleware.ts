@@ -1,5 +1,5 @@
 /**
- * Config NextAuth utilisée uniquement par le middleware (Edge Runtime).
+ * Config NextAuth utilisée uniquement par le proxy (Edge Runtime).
  * Aucun provider Credentials, pas d'import Prisma/bcrypt — évite "node:buffer" et "node:path" en Edge.
  */
 import NextAuth from 'next-auth'
