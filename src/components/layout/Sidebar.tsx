@@ -47,8 +47,11 @@ function getNavForRole(role: string): NavEntry[] {
     case 'DG':
       return [
         { type: 'link', name: 'Tableau de bord', href: dashboardHref, icon: LayoutDashboard },
-        { type: 'link', name: 'Toutes les directions', href: '/directeur/kpi-direction', icon: Building2 },
+        { type: 'link', name: 'KPI des directions', href: '/directeur/kpi-direction', icon: Building2 },
         { type: 'link', name: 'Assignations', href: '/manager/assignation', icon: Send },
+        { type: 'link', name: 'Valider saisies', href: '/manager/validation', icon: CheckCircle2 },
+        { type: 'link', name: 'Mon équipe', href: '/manager/equipe', icon: UserCheck },
+        { type: 'link', name: 'Contestations', href: '/manager/assignation/contestations', icon: AlertCircle },
         { type: 'link', name: "Périodes d'évaluation", href: '/admin/periodes', icon: Calendar },
         { type: 'link', name: 'Configuration de base', href: '/dashboard/admin', icon: Settings },
       ]
@@ -60,14 +63,20 @@ function getNavForRole(role: string): NavEntry[] {
         { type: 'link', name: 'Mon historique', href: '/employe/historique', icon: History },
         { type: 'group', label: 'Gestion de mon équipe' },
         { type: 'link', name: 'Tableau de bord', href: dashboardHref, icon: LayoutDashboard },
-        { type: 'link', name: 'Mes KPI direction', href: '/directeur/kpi-direction', icon: Target },
+        { type: 'link', name: 'KPI des directions', href: '/directeur/kpi-direction', icon: Target },
         { type: 'link', name: 'Services', href: '/directeur/services', icon: Building2 },
         { type: 'link', name: 'Rapports', href: '/directeur/rapports', icon: BarChart3 },
       ]
     case 'CHEF_SERVICE':
       return [
+        { type: 'group', label: 'Mon évaluation personnelle' },
         { type: 'link', name: 'Tableau de bord', href: dashboardHref, icon: LayoutDashboard },
+        { type: 'link', name: 'Mes KPI personnels', href: '/employe/mes-kpi', icon: Target },
+        { type: 'link', name: 'Ma saisie mensuelle', href: '/saisie', icon: ClipboardList },
+        { type: 'group', label: 'Gestion de mon équipe' },
         { type: 'link', name: 'Mes KPI service', href: '/chef-service/kpi-service', icon: Target },
+        { type: 'link', name: 'Valider saisies', href: '/manager/validation', icon: CheckCircle2 },
+        { type: 'link', name: 'Contestations', href: '/manager/assignation/contestations', icon: AlertCircle },
         { type: 'link', name: 'Mon équipe', href: '/chef-service/mon-equipe', icon: UserCheck },
       ]
     case 'MANAGER':

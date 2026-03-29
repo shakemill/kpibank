@@ -250,9 +250,20 @@ export default function MesKpiPage() {
                           </Button>
                         </div>
                       )}
+                      {(row.statut === 'MAINTENU' || row.statut === 'REVISE') && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => handleAccepter(row)}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          Valider
+                        </Button>
+                      )}
                       {row.statut === 'VALIDE' && (
                         <Button variant="outline" size="sm" asChild className="gap-1">
-                          <Link href={`/employe/saisie?kpiEmployeId=${row.id}`}>
+                          <Link href={`/saisie?kpiEmployeId=${row.id}`}>
                             <FileInput className="h-3.5 w-3.5" />
                             Saisir
                           </Link>

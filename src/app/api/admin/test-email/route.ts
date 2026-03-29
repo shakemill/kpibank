@@ -27,11 +27,8 @@ export async function POST(request: NextRequest) {
     `
     const sendResult = await sendMail({ to, subject, html })
     if (!sendResult.success) {
-      return apiError(
-        'Échec envoi',
-        500,
-        sendResult.error instanceof Error ? sendResult.error.message : String(sendResult.error)
-      )
+      const errMsg = sendResult.error instanceof Error ? sendResult.error.message : String(sendResult.error)
+      return apiError('Échec envoi : ' + errMsg, 500, sendResult.error)
     }
     return apiSuccess({ success: true, messageId: sendResult.messageId })
   } catch (e) {

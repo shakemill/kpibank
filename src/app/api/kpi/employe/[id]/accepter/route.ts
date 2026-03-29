@@ -25,9 +25,9 @@ export async function POST(
   if (existing.employeId !== userId) {
     return NextResponse.json({ error: 'Accès refusé' }, { status: 403 })
   }
-  if (existing.statut !== 'NOTIFIE') {
+  if (!['NOTIFIE', 'MAINTENU', 'REVISE'].includes(existing.statut)) {
     return NextResponse.json(
-      { error: 'Seuls les KPI notifiés peuvent être acceptés' },
+      { error: 'Ce KPI ne peut pas être accepté dans son état actuel' },
       { status: 400 }
     )
   }

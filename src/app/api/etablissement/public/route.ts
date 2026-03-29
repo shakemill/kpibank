@@ -13,12 +13,12 @@ export async function GET() {
       select: { nom: true, logo: true },
     })
     if (!etablissement) {
-      return NextResponse.json({ nom: 'Banque Nationale', logo: null })
+      return NextResponse.json({ nom: 'Établissement', logo: null })
     }
     return NextResponse.json(etablissement)
   } catch (e) {
     return NextResponse.json(
-      { nom: 'Banque Nationale', logo: null },
+      { nom: 'Établissement', logo: null },
       { status: 200 }
     )
   }

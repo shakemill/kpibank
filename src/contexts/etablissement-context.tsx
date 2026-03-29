@@ -15,7 +15,7 @@ type EtablissementContextValue = {
 }
 
 const defaultValue: EtablissementContextValue = {
-  nom: 'Banque Nationale',
+  nom: 'Établissement',
   logo: null,
   loading: true,
 }
@@ -32,7 +32,7 @@ export function EtablissementProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         if (cancelled) return
         setValue({
-          nom: data?.nom ?? 'Banque Nationale',
+          nom: data?.nom ?? 'Établissement',
           logo: data?.logo ?? null,
           loading: false,
         })

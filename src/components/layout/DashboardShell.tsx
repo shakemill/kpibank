@@ -1,7 +1,6 @@
 'use client'
 
 import { ReactNode, useState } from 'react'
-import { useEtablissement } from '@/contexts/etablissement-context'
 import { useRouter } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
@@ -29,7 +28,6 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { nom: nomEtablissement } = useEtablissement()
   const { data: session } = useSession()
   const router = useRouter()
   const user = session?.user as { prenom?: string; nom?: string; email?: string; role?: string } | undefined
@@ -67,7 +65,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </Button>
 
           <div className="flex-1 lg:ml-0 ml-4">
-            <h2 className="text-lg font-semibold text-foreground">Système KPI — {nomEtablissement}</h2>
+            <h2 className="text-lg font-semibold text-foreground">Système de Gestion des KPI pour Banques</h2>
           </div>
 
           <ClientOnly

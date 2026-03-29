@@ -55,7 +55,15 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { TableSkeleton } from '@/components/table-skeleton'
-import { Target, Plus, Edit, Ban, CheckCircle, Search, ListChecks, BarChart3, Star, TrendingUp, ArrowLeft } from 'lucide-react'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
+import { Target, Plus, Edit, Ban, CheckCircle, Search, ListChecks, BarChart3, Star, TrendingUp, ArrowLeft, ArrowUp, ArrowDown } from 'lucide-react'
 
 type CatalogueRow = {
   id: number
@@ -98,6 +106,22 @@ export default function CatalogueKpiPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [uniteFilter, setUniteFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  type SortColumn = 'nom' | 'type' | 'unite' | 'mode_agregation'
+  const [sortBy, setSortBy] = useState<SortColumn>('nom')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = (column: SortColumn) => {
+    setSortBy((prev) => {
+      if (prev === column) {
+        setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))
+        return column
+      }
+      setSortOrder('asc')
+      return column
+    })
+  }
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editRow, setEditRow] = useState<CatalogueRow | null>(null)
@@ -250,17 +274,47 @@ export default function CatalogueKpiPage() {
     let items = list
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
-      items = items.filter(
-        (r) =>
-          r.nom.toLowerCase().includes(q) ||
-          (r.description?.toLowerCase().includes(q)) ||
-          (r.unite?.toLowerCase().includes(q))
-      )
+      items = items.filter((r) => r.nom.toLowerCase().includes(q))
     }
     if (typeFilter !== 'all') items = items.filter((r) => r.type === typeFilter)
     if (uniteFilter !== 'all') items = items.filter((r) => (r.unite?.trim() ?? '') === uniteFilter)
     return items
   }, [list, searchQuery, typeFilter, uniteFilter])
+
+  const sortedList = useMemo(() => {
+    return [...filteredList].sort((a, b) => {
+      let cmp = 0
+      switch (sortBy) {
+        case 'nom':
+          cmp = (a.nom ?? '').localeCompare(b.nom ?? '', undefined, { sensitivity: 'base' })
+          break
+        case 'type':
+          cmp = (a.type ?? '').localeCompare(b.type ?? '', undefined, { sensitivity: 'base' })
+          break
+        case 'unite':
+          cmp = (a.unite ?? '').localeCompare(b.unite ?? '', undefined, { sensitivity: 'base' })
+          break
+        case 'mode_agregation':
+          cmp = (a.mode_agregation ?? '').localeCompare(b.mode_agregation ?? '', undefined, { sensitivity: 'base' })
+          break
+        default:
+          break
+      }
+      return sortOrder === 'asc' ? cmp : -cmp
+    })
+  }, [filteredList, sortBy, sortOrder])
+
+  const totalFiltered = sortedList.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const paginatedList = useMemo(
+    () => sortedList.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [sortedList, currentPage, pageSize]
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [searchQuery, typeFilter, uniteFilter, actifFilter])
 
   return (
     <TooltipProvider>
@@ -307,7 +361,7 @@ export default function CatalogueKpiPage() {
               <div className="relative flex-1 sm:flex-initial sm:w-52">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Rechercher (nom, unité...)"
+                  placeholder="Filtrer par nom"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 h-9"
@@ -352,93 +406,221 @@ export default function CatalogueKpiPage() {
           {loading ? (
             <TableSkeleton rows={6} cols={7} />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Unité</TableHead>
-                  <TableHead>Mode agrégation</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="w-[120px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredList.map((row) => {
-                  const typeCfg = TYPE_CONFIG[row.type] ?? { label: row.type, className: '', Icon: Target }
-                  const modeCfg = MODE_CONFIG[row.mode_agregation] ?? { label: row.mode_agregation, className: '' }
-                  return (
-                    <TableRow key={row.id} className="group hover:bg-muted/50 transition-colors">
-                      <TableCell className="font-medium">{row.nom}</TableCell>
-                      <TableCell className="max-w-[220px] truncate text-muted-foreground" title={row.description ?? undefined}>
-                        {row.description ?? '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={`gap-1 border ${typeCfg.className}`}>
-                          <typeCfg.Icon className="h-3 w-3" />
-                          {typeCfg.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{row.unite ?? '—'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={`text-xs font-normal ${modeCfg.className}`}>
-                          {modeCfg.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={row.actif ? 'default' : 'secondary'} className={row.actif ? 'bg-green-600 hover:bg-green-600' : ''}>
-                          {row.actif ? 'Actif' : 'Inactif'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8 gap-1.5 font-medium hover:bg-muted/50"
+                        onClick={() => handleSort('nom')}
+                      >
+                        Nom
+                        {sortBy === 'nom' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          )
+                        ) : null}
+                      </Button>
+                    </TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8 gap-1.5 font-medium hover:bg-muted/50"
+                        onClick={() => handleSort('type')}
+                      >
+                        Type
+                        {sortBy === 'type' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          )
+                        ) : null}
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8 gap-1.5 font-medium hover:bg-muted/50"
+                        onClick={() => handleSort('unite')}
+                      >
+                        Unité
+                        {sortBy === 'unite' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          )
+                        ) : null}
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8 gap-1.5 font-medium hover:bg-muted/50"
+                        onClick={() => handleSort('mode_agregation')}
+                      >
+                        Mode agrégation
+                        {sortBy === 'mode_agregation' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          )
+                        ) : null}
+                      </Button>
+                    </TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead className="w-[120px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedList.map((row) => {
+                    const typeCfg = TYPE_CONFIG[row.type] ?? { label: row.type, className: '', Icon: Target }
+                    const modeCfg = MODE_CONFIG[row.mode_agregation] ?? { label: row.mode_agregation, className: '' }
+                    return (
+                      <TableRow key={row.id} className="group hover:bg-muted/50 transition-colors">
+                        <TableCell className="font-medium">{row.nom}</TableCell>
+                        <TableCell className="max-w-[220px] truncate text-muted-foreground" title={row.description ?? undefined}>
+                          {row.description?.trim() || '—'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={`gap-1 border ${typeCfg.className}`}>
+                            <typeCfg.Icon className="h-3 w-3" />
+                            {typeCfg.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{row.unite ?? '—'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={`text-xs font-normal ${modeCfg.className}`}>
+                            {modeCfg.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                              <span className="inline-flex items-center justify-center" role="img" aria-label={row.actif ? 'Actif' : 'Inactif'}>
+                                {row.actif ? (
+                                  <CheckCircle className="h-5 w-5 text-green-600" />
+                                ) : (
+                                  <Ban className="h-5 w-5 text-muted-foreground" />
+                                )}
+                              </span>
                             </TooltipTrigger>
-                            <TooltipContent>Modifier</TooltipContent>
+                            <TooltipContent>{row.actif ? 'Actif' : 'Inactif'}</TooltipContent>
                           </Tooltip>
-                          {row.actif ? (
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                  onClick={() => { setConfirmTarget(row); setConfirmAction('desactiver') }}
-                                >
-                                  <Ban className="h-4 w-4" />
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
+                                  <Edit className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Désactiver</TooltipContent>
+                              <TooltipContent>Modifier</TooltipContent>
                             </Tooltip>
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-green-600"
-                                  onClick={() => { setConfirmTarget(row); setConfirmAction('activer') }}
-                                >
-                                  <CheckCircle className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Activer</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+                            {row.actif ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                    onClick={() => { setConfirmTarget(row); setConfirmAction('desactiver') }}
+                                  >
+                                    <Ban className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Désactiver</TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-green-600"
+                                    onClick={() => { setConfirmTarget(row); setConfirmAction('activer') }}
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Activer</TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+              {totalFiltered > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 border-t mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalFiltered)} sur {totalFiltered}
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">Afficher</span>
+                      <Select
+                        value={String(pageSize)}
+                        onValueChange={(v) => {
+                          setPageSize(Number(v))
+                          setPage(1)
+                        }}
+                      >
+                        <SelectTrigger className="w-[70px] h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="25">25</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); setPage((p) => Math.max(1, p - 1)) }}
+                            className={currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}
+                            aria-disabled={currentPage <= 1}
+                          />
+                        </PaginationItem>
+                        <PaginationItem>
+                          <span className="px-2 text-sm text-muted-foreground">
+                            Page {currentPage} / {totalPages}
+                          </span>
+                        </PaginationItem>
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); setPage((p) => Math.min(totalPages, p + 1)) }}
+                            className={currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}
+                            aria-disabled={currentPage >= totalPages}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
+                </div>
+              )}
+            </>
           )}
-          {!loading && filteredList.length === 0 && (() => {
+          {!loading && totalFiltered === 0 && (() => {
             const hasFilters = searchQuery || typeFilter !== 'all' || uniteFilter !== 'all' || actifFilter !== 'all'
             return (
               <div className="flex flex-col items-center justify-center py-16 px-4 text-center border rounded-lg bg-muted/30">

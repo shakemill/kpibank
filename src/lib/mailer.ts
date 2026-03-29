@@ -1,13 +1,18 @@
 import nodemailer from 'nodemailer'
 
+const mailPort = Number(process.env.MAIL_PORT) || 465
+const useSecure = (process.env.MAIL_ENCRYPTION ?? 'ssl').toLowerCase() === 'ssl' || mailPort === 465
+
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
-  port: Number(process.env.MAIL_PORT),
-  secure: process.env.MAIL_ENCRYPTION === 'ssl',
-  auth: {
-    user: process.env.MAIL_USERNAME,
-    pass: process.env.MAIL_PASSWORD,
-  },
+  port: mailPort,
+  secure: useSecure,
+  auth: process.env.MAIL_USERNAME
+    ? {
+        user: process.env.MAIL_USERNAME,
+        pass: process.env.MAIL_PASSWORD,
+      }
+    : undefined,
   tls: {
     rejectUnauthorized: false,
   },

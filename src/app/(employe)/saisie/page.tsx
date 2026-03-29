@@ -27,8 +27,10 @@ import {
   BarChart3,
   BookOpen,
   Calendar,
+  CalendarX,
   CheckCircle2,
   ClipboardList,
+  ClipboardX,
   FileText,
   Loader2,
   Lock,
@@ -117,7 +119,10 @@ export default function SaisiePage() {
   const [kpiEmployes, setKpiEmployes] = useState<KpiEmployeItem[]>([])
   const [saisies, setSaisies] = useState<SaisieItem[]>([])
   const [statutPeriode, setStatutPeriode] = useState<string>('OUVERTE')
+  const [periodesOuvertesParN1, setPeriodesOuvertesParN1] = useState<{ mois: number; annee: number }[]>([])
   const [delaiJour, setDelaiJour] = useState(10)
+  const [periode, setPeriode] = useState<{ code: string } | null>(null)
+  const [dernierePeriode, setDernierePeriode] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -141,7 +146,10 @@ export default function SaisiePage() {
     setKpiEmployes(data.kpiEmployes ?? [])
     setSaisies(data.saisies ?? [])
     setStatutPeriode(data.statutPeriode ?? 'OUVERTE')
+    setPeriodesOuvertesParN1(data.periodesOuvertesParN1 ?? [])
     setDelaiJour(data.delaiJour ?? 10)
+    setPeriode(data.periode ?? null)
+    setDernierePeriode(data.dernierePeriode ?? null)
     const next: FormValues = {}
     for (const k of data.kpiEmployes ?? []) {
       const s = (data.saisies ?? []).find((x: SaisieItem) => x.kpiEmployeId === k.id)
@@ -159,9 +167,13 @@ export default function SaisiePage() {
     fetchData()
   }, [fetchData])
 
+  const periodeOuverteParN1 = periodesOuvertesParN1.some((p) => p.mois === mois && p.annee === annee)
+  const saisieModifiable = statutPeriode !== 'VERROUILLEE' || periodeOuverteParN1
+
   const canChangeMonth = (m: number, a: number) => {
     const statut = getStatutSaisie(m, a, delaiJour)
-    return statut !== 'VERROUILLEE'
+    const ouverteParN1 = periodesOuvertesParN1.some((p) => p.mois === m && p.annee === a)
+    return statut !== 'VERROUILLEE' || ouverteParN1
   }
 
   const moisOptions: { mois: number; annee: number; label: string }[] = []
@@ -189,28 +201,33 @@ export default function SaisiePage() {
   }
 
   const getValeurNum = (kpiEmployeId: number): number | null => {
-    const v = form[kpiEmployeId]?.valeur?.trim()
-    if (v === '') return null
+    const v = form[kpiEmployeId]?.valeur?.trim?.()
+    if (v == null || v === '') return null
     const n = parseFloat(v.replace(',', '.'))
     return Number.isNaN(n) ? null : n
   }
 
-  const allFilled = kpiEmployes.length > 0 && kpiEmployes.every((k) => {
-    const val = getValeurNum(k.id)
-    if (val == null) return false
-    if (k.catalogueKpi.type === 'QUALITATIF' && !(form[k.id]?.commentaire?.trim())) return false
-    if (k.catalogueKpi.type === 'COMPORTEMENTAL' && !(form[k.id]?.preuves?.trim())) return false
-    return true
-  })
-
   const isCardReadOnly = (kpiEmployeId: number) => {
-    if (statutPeriode === 'VERROUILLEE') return true
+    if (!saisieModifiable) return true
     const s = saisies.find((x) => x.kpiEmployeId === kpiEmployeId)
     return s ? ['SOUMISE', 'VALIDEE', 'AJUSTEE'].includes(s.statut) : false
   }
 
+  // Ne considérer que les KPI modifiables pour la soumission
+  const kpiToSubmit = kpiEmployes.filter((k) => !isCardReadOnly(k.id))
+  const missingFields = kpiToSubmit
+    .map((k) => {
+      const val = getValeurNum(k.id)
+      if (val == null) return { nom: k.catalogueKpi.nom, champ: 'valeur' }
+      if (k.catalogueKpi.type === 'QUALITATIF' && !(form[k.id]?.commentaire?.trim())) return { nom: k.catalogueKpi.nom, champ: 'Source de la note (obligatoire)' }
+      if (k.catalogueKpi.type === 'COMPORTEMENTAL' && !(form[k.id]?.preuves?.trim())) return { nom: k.catalogueKpi.nom, champ: 'Preuves (obligatoire)' }
+      return null
+    })
+    .filter((x): x is { nom: string; champ: string } => x != null)
+  const allFilled = kpiToSubmit.length > 0 && missingFields.length === 0
+
   const handleSaveDraft = async () => {
-    if (statutPeriode === 'VERROUILLEE') return
+    if (!saisieModifiable) return
     setSaving(true)
     const updates = kpiEmployes.map((k) => {
       const val = getValeurNum(k.id)
@@ -240,10 +257,10 @@ export default function SaisiePage() {
   }
 
   const handleSubmit = async () => {
-    if (!allFilled || statutPeriode === 'VERROUILLEE') return
+    if (!allFilled || !saisieModifiable) return
     setSubmitting(true)
     const ids: number[] = []
-    for (const k of kpiEmployes) {
+    for (const k of kpiToSubmit) {
       const s = saisies.find((x) => x.kpiEmployeId === k.id)
       const val = getValeurNum(k.id)
       const res = await fetch('/api/saisies', {
@@ -289,7 +306,7 @@ export default function SaisiePage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-8 p-6 max-w-4xl mx-auto">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -333,15 +350,23 @@ export default function SaisiePage() {
         </div>
       </div>
 
-      {statutPeriode === 'EN_RETARD' && (
+      {statutPeriode === 'EN_RETARD' && !periodeOuverteParN1 && (
         <Alert variant="default" className="border-amber-500/50 bg-amber-500/10">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <AlertDescription className="flex items-center gap-2">
-            Votre saisie est en retard, votre manager est informé.
+            Votre saisie est en retard, votre manager est informé. Vous pouvez encore saisir et soumettre ci-dessous.
           </AlertDescription>
         </Alert>
       )}
-      {statutPeriode === 'VERROUILLEE' && (
+      {statutPeriode === 'VERROUILLEE' && periodeOuverteParN1 && (
+        <Alert variant="default" className="border-emerald-500/50 bg-emerald-500/10">
+          <PenLine className="h-4 w-4 shrink-0" />
+          <AlertDescription>
+            Votre N+1 a ouvert cette période (saisie dépassée). Vous pouvez saisir et soumettre ci-dessous.
+          </AlertDescription>
+        </Alert>
+      )}
+      {statutPeriode === 'VERROUILLEE' && !periodeOuverteParN1 && (
         <Alert variant="destructive" className="border-red-500/50">
           <Lock className="h-4 w-4 shrink-0" />
           <AlertDescription>
@@ -355,17 +380,36 @@ export default function SaisiePage() {
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Chargement des KPI...</p>
         </div>
+      ) : periode == null ? (
+        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed py-16 px-6 text-center">
+          <CalendarX className="h-16 w-16 text-muted-foreground" />
+          <h3 className="text-lg font-semibold text-foreground">
+            Aucune période active ce mois
+          </h3>
+          <p className="text-muted-foreground max-w-md">
+            Il n&apos;y a pas de période d&apos;évaluation active pour{' '}
+            <strong>{MOIS_LABELS[mois]} {annee}</strong>. Contactez votre administrateur RH.
+          </p>
+          {dernierePeriode && (
+            <p className="text-xs text-muted-foreground">
+              Dernière période connue : {dernierePeriode}
+            </p>
+          )}
+        </div>
       ) : kpiEmployes.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center gap-3 py-12">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-              <ClipboardList className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <p className="text-muted-foreground text-center">Aucun KPI validé pour ce mois.</p>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed py-16 px-6 text-center">
+          <ClipboardX className="h-16 w-16 text-muted-foreground" />
+          <h3 className="text-lg font-semibold text-foreground">
+            Aucun KPI assigné pour cette période
+          </h3>
+          <p className="text-muted-foreground max-w-md">
+            Période active : <strong>{periode.code}</strong>
+            <br />
+            Votre manager n&apos;a pas encore assigné de KPI pour cette période.
+          </p>
+        </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {kpiEmployes.map((k) => {
             const type = k.catalogueKpi.type as TypeKpi
             const unite = k.catalogueKpi.unite ?? ''
@@ -387,9 +431,9 @@ export default function SaisiePage() {
 
             return (
               <Card key={k.id} className="border-border/50 overflow-hidden">
-                <CardHeader className="pb-2">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                <CardHeader className="pb-4 pt-6 px-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         {type === 'QUANTITATIF' && <BarChart3 className="h-5 w-5" />}
                         {type === 'QUALITATIF' && <Star className="h-5 w-5" />}
@@ -400,59 +444,59 @@ export default function SaisiePage() {
                           {k.catalogueKpi.nom}
                           {unite && <span className="text-muted-foreground font-normal"> ({unite})</span>}
                         </CardTitle>
-                        <CardDescription className="flex items-center gap-1.5 mt-0.5">
+                        <CardDescription className="flex items-center gap-1.5 mt-1.5">
                           <Target className="h-3.5 w-3.5" />
-                          Cible du mois : {typeof cibleCeMois === 'number' ? cibleCeMois.toFixed(1) : cibleCeMois}
-                          {unite && ` ${unite}`}
+                          Cible du mois : {cibleCeMois != null ? `${Number(cibleCeMois).toFixed(1)}${unite ? ` ${unite}` : ''}` : '—'}
                         </CardDescription>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <KpiTypeBadge type={type} />
                       {k.poids != null && (
-                        <Badge variant="outline" className="font-normal">Poids {k.poids}%</Badge>
+                        <Badge variant="outline" className="font-normal">
+                          Poids {k.poids}%{k.catalogueKpi.unite ? ` (${k.catalogueKpi.unite})` : ''}
+                        </Badge>
                       )}
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6 px-6 pb-6">
                   {/* CIBLE CE MOIS / RÉALISÉ CUMULÉ / ATTENDU À DATE */}
-                  {(k.cible_mensuelle != null || k.realise_cumule != null || k.cible_attendue_a_date != null) && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="rounded-lg border bg-muted/30 p-3">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">Cible ce mois</p>
+                  {(cibleCeMois != null || k.cible_mensuelle != null || k.realise_cumule != null || k.cible_attendue_a_date != null) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="rounded-lg border bg-muted/30 p-4">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Cible ce mois</p>
                         <p className="text-lg font-semibold">
-                          {cibleCeMois != null ? (Number(cibleCeMois) === Math.round(Number(cibleCeMois)) ? String(cibleCeMois) : Number(cibleCeMois).toFixed(1)) : '—'}
-                          {unite && <span className="text-muted-foreground font-normal text-sm"> {unite}</span>}
+                          {cibleCeMois != null
+                            ? `${Number(cibleCeMois).toFixed(1)}${unite ? ` ${unite}` : ''}`
+                            : '—'}
                         </p>
-                        <p className="text-xs text-muted-foreground">ce mois</p>
+                        <p className="text-xs text-muted-foreground mt-1">ce mois</p>
                       </div>
-                      <div className="rounded-lg border bg-muted/30 p-3">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">Réalisé cumulé</p>
+                      <div className="rounded-lg border bg-muted/30 p-4">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Réalisé cumulé</p>
                         <p className="text-lg font-semibold">
-                          {k.realise_cumule != null ? (Number(k.realise_cumule) === Math.round(Number(k.realise_cumule)) ? String(k.realise_cumule) : k.realise_cumule.toFixed(1)) : '—'}
-                          {unite && <span className="text-muted-foreground font-normal text-sm"> {unite}</span>}
+                          {k.realise_cumule != null ? `${Number(k.realise_cumule).toFixed(1)}${unite ? ` ${unite}` : ''}` : '—'}
                         </p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground mt-1">
                           {k.historique?.filter((h) => h.valeur != null).length ?? 0} mois saisis
                         </p>
                       </div>
-                      <div className="rounded-lg border bg-muted/30 p-3">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">Attendu à date</p>
+                      <div className="rounded-lg border bg-muted/30 p-4">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Attendu à date</p>
                         <p className="text-lg font-semibold">
-                          {k.cible_attendue_a_date != null ? (Number(k.cible_attendue_a_date) === Math.round(Number(k.cible_attendue_a_date)) ? String(k.cible_attendue_a_date) : k.cible_attendue_a_date.toFixed(1)) : '—'}
-                          {unite && <span className="text-muted-foreground font-normal text-sm"> {unite}</span>}
+                          {k.cible_attendue_a_date != null ? `${Number(k.cible_attendue_a_date).toFixed(1)}${unite ? ` ${unite}` : ''}` : '—'}
                         </p>
-                        <p className="text-xs text-muted-foreground">à fin du mois</p>
+                        <p className="text-xs text-muted-foreground mt-1">à fin du mois</p>
                       </div>
                     </div>
                   )}
 
                   {/* Cible période + barre progression */}
                   {k.cible_periode != null && k.periode_code != null && (
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <p className="text-sm text-muted-foreground">
-                        Cible période complète : {k.cible_periode} {unite && `${unite} `}
+                        Cible période complète : {typeof k.cible_periode === 'number' ? k.cible_periode.toFixed(1) : k.cible_periode} {unite && `${unite} `}
                         ({k.periode_code}
                         {k.periode_nb_mois != null && ` — ${k.periode_nb_mois} mois`})
                       </p>
@@ -460,7 +504,7 @@ export default function SaisiePage() {
                         <div className="space-y-1">
                           <div className="flex justify-between text-sm">
                             <span>Progression période</span>
-                            <span>{k.taux_avancement_periode}%</span>
+                            <span>{Number(k.taux_avancement_periode).toFixed(1)}%</span>
                           </div>
                           <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
                             <div
@@ -475,11 +519,11 @@ export default function SaisiePage() {
 
                   {/* Timeline historique */}
                   {k.historique != null && k.historique.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground py-1">
                       {k.historique.map((h) => {
                         const isCurrent = h.mois === mois
                         const label = MOIS_LABELS[h.mois]?.slice(0, 3) ?? String(h.mois)
-                        const val = h.valeur != null ? String(h.valeur) : '?'
+                        const val = h.valeur != null ? (typeof h.valeur === 'number' ? h.valeur.toFixed(1) : String(h.valeur)) : '?'
                         return (
                           <span key={h.mois} className={isCurrent ? 'font-medium text-primary' : ''}>
                             {isCurrent && '['}
@@ -493,15 +537,15 @@ export default function SaisiePage() {
                   )}
 
                   {/* Saisie du mois de [Mois Année] */}
-                  <div className="border-t pt-4">
-                    <h4 className="text-sm font-medium mb-3">
+                  <div className="border-t pt-6 mt-2">
+                    <h4 className="text-base font-medium mb-4">
                       Saisie du mois de {MOIS_LABELS[mois]} {annee}
                     </h4>
                   {type === 'QUANTITATIF' && (
-                    <>
+                    <div className="space-y-5">
                       <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm">
-                          <Target className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="flex items-center gap-2 text-sm font-medium">
+                          <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           Valeur réalisée
                         </Label>
                         <Input
@@ -511,12 +555,12 @@ export default function SaisiePage() {
                           onChange={(e) => setFormKpi(k.id, 'valeur', e.target.value)}
                           disabled={readOnly}
                           placeholder="0"
-                          className="max-w-[200px]"
+                          className="max-w-[200px] h-10"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm">
-                          <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="flex items-center gap-2 text-sm font-medium">
+                          <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           Commentaire (optionnel)
                         </Label>
                         <Textarea
@@ -525,11 +569,12 @@ export default function SaisiePage() {
                           disabled={readOnly}
                           placeholder="Commentaire"
                           rows={2}
+                          className="min-h-[80px]"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="flex items-center gap-2 text-sm font-medium">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           Preuves (optionnel)
                         </Label>
                         <Input
@@ -537,16 +582,17 @@ export default function SaisiePage() {
                           onChange={(e) => setFormKpi(k.id, 'preuves', e.target.value)}
                           disabled={readOnly}
                           placeholder="Lien ou référence"
+                          className="h-10"
                         />
                       </div>
-                    </>
+                    </div>
                   )}
 
                   {type === 'QUALITATIF' && (
-                    <>
+                    <div className="space-y-5">
                       <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm">
-                          <Star className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="flex items-center gap-2 text-sm font-medium">
+                          <Star className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           Note réalisée (ex: 4.2)
                         </Label>
                         <Input
@@ -558,12 +604,12 @@ export default function SaisiePage() {
                           onChange={(e) => setFormKpi(k.id, 'valeur', e.target.value)}
                           disabled={readOnly}
                           placeholder="0 à 5"
-                          className="max-w-[120px]"
+                          className="max-w-[120px] h-10"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm">
-                          <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="flex items-center gap-2 text-sm font-medium">
+                          <BookOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           Source de la note (obligatoire)
                         </Label>
                         <Textarea
@@ -572,11 +618,12 @@ export default function SaisiePage() {
                           disabled={readOnly}
                           placeholder="Indiquez la source de la note"
                           rows={2}
+                          className="min-h-[80px]"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="flex items-center gap-2 text-sm font-medium">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           Preuves (optionnel)
                         </Label>
                         <Input
@@ -584,16 +631,17 @@ export default function SaisiePage() {
                           onChange={(e) => setFormKpi(k.id, 'preuves', e.target.value)}
                           disabled={readOnly}
                           placeholder="Lien ou référence"
+                          className="h-10"
                         />
                       </div>
-                    </>
+                    </div>
                   )}
 
                   {type === 'COMPORTEMENTAL' && (
-                    <>
+                    <div className="space-y-5">
                       <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm">
-                          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="flex items-center gap-2 text-sm font-medium">
+                          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           Niveau
                         </Label>
                         <Select
@@ -601,7 +649,7 @@ export default function SaisiePage() {
                           onValueChange={(v) => setFormKpi(k.id, 'valeur', v)}
                           disabled={readOnly}
                         >
-                          <SelectTrigger className="max-w-[320px]">
+                          <SelectTrigger className="max-w-[320px] h-10">
                             <SelectValue placeholder="Choisir le niveau" />
                           </SelectTrigger>
                           <SelectContent>
@@ -614,8 +662,8 @@ export default function SaisiePage() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="flex items-center gap-2 text-sm font-medium">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           Preuves (obligatoire)
                         </Label>
                         <Textarea
@@ -624,18 +672,19 @@ export default function SaisiePage() {
                           disabled={readOnly}
                           placeholder="Justifier le niveau déclaré"
                           rows={3}
+                          className="min-h-[100px]"
                         />
                       </div>
-                    </>
+                    </div>
                   )}
 
                   {(type === 'QUANTITATIF' || type === 'QUALITATIF') && (
                     <>
-                      <div className="space-y-1.5 rounded-lg bg-muted/50 p-3">
+                      <div className="space-y-2 rounded-lg bg-muted/50 p-4">
                         <div className="flex items-center justify-between text-sm">
                           <span className="flex items-center gap-1.5">
                             <Target className="h-3.5 w-3.5 text-muted-foreground" />
-                            {valNum != null ? `${Math.round(taux)}% de la cible` : '—'}
+                            {valNum != null ? `${taux.toFixed(1)}% de la cible` : '—'}
                           </span>
                         </div>
                         <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
@@ -646,13 +695,13 @@ export default function SaisiePage() {
                         </div>
                       </div>
                       {valNum != null && cibleCeMois > 0 && (
-                        <div className="rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 p-3 text-sm">
+                        <div className="rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 p-4 text-sm">
                           <p className="font-medium text-blue-800 dark:text-blue-200">
-                            Si je saisis {valNum} → {Math.round(taux)}% de la cible mensuelle
+                            Si je saisis {typeof valNum === 'number' ? valNum.toFixed(1) : valNum} → {taux.toFixed(1)}% de la cible mensuelle
                           </p>
                           {k.mode_agregation === 'CUMUL' && cumulSiSaisi != null && k.cible_periode != null && (
                             <p className="text-muted-foreground mt-0.5">
-                              Cumul serait : {cumulSiSaisi} / {k.cible_periode} = {pctPeriodeSiSaisi}% de la période
+                              Cumul serait : {typeof cumulSiSaisi === 'number' ? cumulSiSaisi.toFixed(1) : cumulSiSaisi} / {typeof k.cible_periode === 'number' ? k.cible_periode.toFixed(1) : k.cible_periode} = {pctPeriodeSiSaisi != null ? pctPeriodeSiSaisi.toFixed(1) : '—'}% de la période
                             </p>
                           )}
                         </div>
@@ -661,7 +710,7 @@ export default function SaisiePage() {
                   )}
 
                   {saisie && ['SOUMISE', 'VALIDEE', 'AJUSTEE', 'REJETEE'].includes(saisie.statut) && (
-                    <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-4 py-3 text-sm mt-2">
                       {saisie.statut === 'VALIDEE' && <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />}
                       {saisie.statut === 'AJUSTEE' && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />}
                       {saisie.statut === 'SOUMISE' && <Loader2 className="h-4 w-4 animate-spin text-amber-600 shrink-0" />}
@@ -683,12 +732,12 @@ export default function SaisiePage() {
       )}
 
       {!loading && kpiEmployes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4">
+        <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-5">
           <Button
             variant="outline"
             size="default"
             onClick={handleSaveDraft}
-            disabled={statutPeriode === 'VERROUILLEE' || saving}
+            disabled={!saisieModifiable || saving}
             className="gap-2"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -697,17 +746,33 @@ export default function SaisiePage() {
           <Button
             size="default"
             onClick={handleSubmit}
-            disabled={!allFilled || statutPeriode === 'VERROUILLEE' || submitting}
+            disabled={!allFilled || !saisieModifiable || submitting}
             className="gap-2"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             Soumettre pour validation
           </Button>
           {!allFilled && kpiEmployes.length > 0 && (
-            <span className="text-muted-foreground text-sm flex items-center gap-1.5 ml-auto">
-              <Target className="h-3.5 w-3.5" />
-              Remplissez tous les champs pour pouvoir soumettre
-            </span>
+            <div className="text-muted-foreground text-sm ml-auto space-y-0.5">
+              <span className="flex items-center gap-1.5">
+                <Target className="h-3.5 w-3.5 shrink-0" />
+                {kpiToSubmit.length === 0 ? (
+                  'Toutes les saisies sont déjà soumises ou validées'
+                ) : missingFields.length > 0 ? (
+                  <>
+                    Champs manquants :{' '}
+                    {missingFields.map((m, i) => (
+                      <span key={i} className="font-medium text-foreground">
+                        {m.nom} ({m.champ})
+                        {i < missingFields.length - 1 ? ', ' : ''}
+                      </span>
+                    ))}
+                  </>
+                ) : (
+                  'Remplissez tous les champs pour pouvoir soumettre'
+                )}
+              </span>
+            </div>
           )}
         </div>
       )}

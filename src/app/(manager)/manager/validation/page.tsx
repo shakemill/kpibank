@@ -29,9 +29,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Check, Pencil, X, Calendar, AlertCircle } from 'lucide-react'
+import { Check, Pencil, X, Calendar, AlertCircle, Unlock } from 'lucide-react'
 
 const MOIS_LABELS: Record<number, string> = {
   1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril', 5: 'Mai', 6: 'Juin',
@@ -69,14 +79,20 @@ export default function ValidationPage() {
   const [annee, setAnnee] = useState(now.getFullYear())
   const [list, setList] = useState<SaisieSoumise[]>([])
   const [manquantes, setManquantes] = useState<Manquante[]>([])
+  const [statutPeriodeManquantes, setStatutPeriodeManquantes] = useState<string>('OUVERTE')
   const [loading, setLoading] = useState(true)
   const [loadingManquantes, setLoadingManquantes] = useState(false)
+  const [ouvrirPeriodeLoading, setOuvrirPeriodeLoading] = useState<number | null>(null)
   const [rejeterModal, setRejeterModal] = useState<SaisieSoumise | null>(null)
   const [ajusterModal, setAjusterModal] = useState<SaisieSoumise | null>(null)
   const [motifRejet, setMotifRejet] = useState('')
   const [valeurAjustee, setValeurAjustee] = useState('')
   const [motifAjustement, setMotifAjustement] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [confirmValider, setConfirmValider] = useState<SaisieSoumise | null>(null)
+  const [confirmToutValider, setConfirmToutValider] = useState<{ employeId: number; nom: string; count: number } | null>(null)
+  const [confirmRejeter, setConfirmRejeter] = useState(false)
+  const [confirmAjuster, setConfirmAjuster] = useState(false)
 
   const fetchSoumises = useCallback(async () => {
     setLoading(true)
@@ -98,7 +114,25 @@ export default function ValidationPage() {
     if (!res.ok) return
     const data = await res.json()
     setManquantes(data.manquantes ?? [])
+    setStatutPeriodeManquantes(data.statutPeriode ?? 'OUVERTE')
   }, [mois, annee])
+
+  const handleOuvrirPeriode = async (employeId: number) => {
+    setOuvrirPeriodeLoading(employeId)
+    const res = await fetch('/api/saisies/ouvrir-periode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeId, mois, annee }),
+    })
+    setOuvrirPeriodeLoading(null)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast({ title: 'Erreur', description: data?.error ?? 'Ouverture de la période', variant: 'destructive' })
+      return
+    }
+    toast({ title: 'Période ouverte', description: 'Le collaborateur peut désormais saisir pour ce mois.' })
+    fetchManquantes()
+  }
 
   useEffect(() => {
     fetchSoumises()
@@ -276,6 +310,7 @@ export default function ValidationPage() {
               ) : list.length === 0 ? (
                 <p className="text-muted-foreground">Aucune saisie en attente de validation.</p>
               ) : (
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -312,12 +347,13 @@ export default function ValidationPage() {
                               })
                             : '—'}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
+                        <TableCell className="whitespace-nowrap">
+                          <div className="flex flex-nowrap gap-1 items-center shrink-0">
                             <Button
                               size="sm"
+                              className="shrink-0 whitespace-nowrap"
                               variant="default"
-                              onClick={() => handleValider(s)}
+                              onClick={() => setConfirmValider(s)}
                               disabled={submitting}
                             >
                               <Check className="h-3.5 w-3.5 mr-1" />
@@ -326,6 +362,7 @@ export default function ValidationPage() {
                             <Button
                               size="sm"
                               variant="outline"
+                              className="shrink-0 whitespace-nowrap"
                               onClick={() => openAjuster(s)}
                               disabled={submitting}
                             >
@@ -335,7 +372,7 @@ export default function ValidationPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-destructive hover:text-destructive"
+                              className="shrink-0 whitespace-nowrap text-destructive hover:text-destructive"
                               onClick={() => openRejeter(s)}
                               disabled={submitting}
                             >
@@ -348,6 +385,7 @@ export default function ValidationPage() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               )}
               {list.length > 0 && employeIds.length > 0 && (
                 <div className="mt-4 pt-4 border-t flex flex-wrap gap-2">
@@ -361,7 +399,7 @@ export default function ValidationPage() {
                         key={eid}
                         variant="secondary"
                         size="sm"
-                        onClick={() => handleToutValider(eid)}
+                        onClick={() => setConfirmToutValider({ employeId: eid, nom: nom, count })}
                         disabled={submitting}
                       >
                         {nom} ({count})
@@ -385,6 +423,11 @@ export default function ValidationPage() {
                   <CardTitle className="text-base">Saisies manquantes</CardTitle>
                   <CardDescription>
                     Employés n&apos;ayant pas encore saisi pour {MOIS_LABELS[mois]} {annee}
+                    {statutPeriodeManquantes === 'VERROUILLEE' && (
+                      <span className="block mt-1 text-amber-600 dark:text-amber-400">
+                        Période dépassée : vous pouvez ouvrir la saisie pour un collaborateur.
+                      </span>
+                    )}
                   </CardDescription>
                 </div>
               </div>
@@ -401,6 +444,9 @@ export default function ValidationPage() {
                       <TableHead>Nom</TableHead>
                       <TableHead>Prénom</TableHead>
                       <TableHead>Email</TableHead>
+                      {statutPeriodeManquantes === 'VERROUILLEE' && (
+                        <TableHead className="w-[140px]">Action</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -409,6 +455,26 @@ export default function ValidationPage() {
                         <TableCell className="font-medium">{m.nom}</TableCell>
                         <TableCell>{m.prenom}</TableCell>
                         <TableCell className="text-muted-foreground">{m.email}</TableCell>
+                        {statutPeriodeManquantes === 'VERROUILLEE' && (
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1"
+                              onClick={() => handleOuvrirPeriode(m.employeId)}
+                              disabled={ouvrirPeriodeLoading !== null}
+                            >
+                              {ouvrirPeriodeLoading === m.employeId ? (
+                                <>Ouverture...</>
+                              ) : (
+                                <>
+                                  <Unlock className="h-3.5 w-3.5" />
+                                  Ouvrir la saisie
+                                </>
+                              )}
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -440,7 +506,7 @@ export default function ValidationPage() {
             <Button variant="outline" onClick={() => setRejeterModal(null)}>
               Annuler
             </Button>
-            <Button variant="destructive" onClick={handleRejeter} disabled={!motifRejet.trim() || submitting}>
+            <Button variant="destructive" onClick={() => setConfirmRejeter(true)} disabled={!motifRejet.trim() || submitting}>
               Rejeter
             </Button>
           </DialogFooter>
@@ -481,7 +547,7 @@ export default function ValidationPage() {
               Annuler
             </Button>
             <Button
-              onClick={handleAjuster}
+              onClick={() => setConfirmAjuster(true)}
               disabled={
                 !motifAjustement.trim() ||
                 Number.isNaN(parseFloat(valeurAjustee.replace(',', '.'))) ||
@@ -493,6 +559,74 @@ export default function ValidationPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!confirmValider} onOpenChange={(o) => !o && setConfirmValider(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la validation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Valider la saisie de {confirmValider ? `${confirmValider.employe.prenom} ${confirmValider.employe.nom}` : ''} pour {confirmValider ? `${confirmValider.kpiEmploye.catalogueKpi.nom}` : ''} ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmValider && handleValider(confirmValider)}>
+              Confirmer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!confirmToutValider} onOpenChange={(o) => !o && setConfirmToutValider(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Valider toutes les saisies</AlertDialogTitle>
+            <AlertDialogDescription>
+              Valider les {confirmToutValider?.count ?? 0} saisie(s) de {confirmToutValider?.nom ?? ''} ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmToutValider && handleToutValider(confirmToutValider.employeId)}>
+              Confirmer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmRejeter} onOpenChange={(o) => !o && setConfirmRejeter(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer le rejet</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir rejeter cette saisie ? L&apos;employé devra la modifier et resoumettre.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRejeter}>
+              Confirmer le rejet
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmAjuster} onOpenChange={(o) => !o && setConfirmAjuster(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer l&apos;ajustement</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir ajuster cette saisie ? La nouvelle valeur sera enregistrée et la saisie marquée comme ajustée.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAjuster}>
+              Confirmer l&apos;ajustement
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

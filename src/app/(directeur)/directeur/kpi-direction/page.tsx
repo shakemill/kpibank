@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -47,7 +48,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Calendar, Target, PieChart, Edit, Plus, CheckCircle, Trash2 } from 'lucide-react'
+import { Calendar, Target, PieChart, Edit, Plus, CheckCircle, Trash2, BookOpen, Hash } from 'lucide-react'
 
 type Periode = {
   id: number
@@ -350,9 +351,9 @@ export default function KpiDirectionPage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">KPI de la direction</h1>
+        <h1 className="text-3xl font-bold tracking-tight">KPI des directions</h1>
         <p className="text-muted-foreground mt-1">
-          Gérer les KPI de ma direction{directionNom ? ` (${directionNom})` : ''} pour la période sélectionnée
+          Gérer les KPI des directions{directionNom ? ` (${directionNom})` : ''} pour la période sélectionnée
         </p>
       </div>
 
@@ -393,7 +394,7 @@ export default function KpiDirectionPage() {
             </div>
             <div>
               <CardTitle className="text-base">Période active</CardTitle>
-              <CardDescription>Choisir la période pour les KPI direction</CardDescription>
+              <CardDescription>Choisir la période pour les KPI des directions</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -436,7 +437,7 @@ export default function KpiDirectionPage() {
                 <Target className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <CardTitle className="text-base">KPI de la direction</CardTitle>
+                <CardTitle className="text-base">KPI des directions</CardTitle>
                 <CardDescription>Liste des KPI et répartition des poids</CardDescription>
               </div>
             </div>
@@ -520,90 +521,130 @@ export default function KpiDirectionPage() {
 
       {/* Section 3 — Modal formulaire */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editKpi ? 'Modifier le KPI direction' : 'Ajouter un KPI direction'}</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Poids restant disponible : <strong>{dynamicPoidsRestant.toFixed(1)}%</strong>
-            </p>
-          </DialogHeader>
-          <div className="space-y-4">
-            {!editKpi && (
-              <>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Rechercher dans le catalogue</label>
-                  <Input
-                    placeholder="Filtrer par nom..."
-                    value={catalogueFilter}
-                    onChange={(e) => setCatalogueFilter(e.target.value)}
-                    className="mb-2"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">KPI (catalogue)</label>
-                  <Select value={formCatalogueId} onValueChange={(v) => setFormCatalogueId(v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choisir un KPI du catalogue" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredCatalogue.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.nom} ({c.type})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
-            {editKpi && (
-              <div>
-                <label className="text-sm font-medium mb-2 block">KPI</label>
-                <p className="text-sm text-muted-foreground">{editKpi.catalogueKpi.nom}</p>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Target className="h-5 w-5 text-primary" />
               </div>
-            )}
-            <div>
-              <label className="text-sm font-medium mb-2 block">Cible</label>
-              <Input
-                type="number"
-                step="any"
-                value={formCible}
-                onChange={(e) => setFormCible(e.target.value)}
-              />
+              <div className="space-y-1.5">
+                <DialogTitle>{editKpi ? 'Modifier le KPI direction' : 'Ajouter un KPI direction'}</DialogTitle>
+                <DialogDescription asChild>
+                  <p className="text-sm text-muted-foreground">
+                    Poids restant à répartir : <strong className="text-foreground">{dynamicPoidsRestant.toFixed(1)}%</strong>
+                    {dynamicPoidsRestant < 100 && (
+                      <span className="ml-1">— la somme des poids doit faire 100%</span>
+                    )}
+                  </p>
+                </DialogDescription>
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Unité</label>
-              <Input
-                value={selectedCatalogueItem?.unite ?? editKpi?.catalogueKpi.unite ?? ''}
-                readOnly
-                className="bg-muted"
-              />
+          </DialogHeader>
+          <div className="space-y-1 pt-1">
+            {/* Section 1 — KPI du catalogue */}
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <BookOpen className="h-4 w-4 shrink-0" />
+                KPI du catalogue
+              </div>
+              {!editKpi && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1.5 block">Recherche</label>
+                    <Input
+                      placeholder="Rechercher un KPI par nom..."
+                      value={catalogueFilter}
+                      onChange={(e) => setCatalogueFilter(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1.5 block">Sélection</label>
+                    <Select value={formCatalogueId} onValueChange={(v) => setFormCatalogueId(v)}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Choisir un KPI du catalogue" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredCatalogue.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.nom} ({c.type})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              {editKpi && (
+                <p className="text-sm font-medium py-1">{editKpi.catalogueKpi.nom}</p>
+              )}
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Poids (%)</label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={0.5}
-                value={formPoids}
-                onChange={(e) => setFormPoids(e.target.value)}
-              />
+
+            {/* Section 2 — Objectif et répartition */}
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Hash className="h-4 w-4 shrink-0" />
+                Objectif et répartition
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block mb-2">Objectif</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Cible</label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={formCible}
+                      onChange={(e) => setFormCible(e.target.value)}
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Unité</label>
+                    <Input
+                      value={selectedCatalogueItem?.unite ?? editKpi?.catalogueKpi.unite ?? ''}
+                      readOnly
+                      className="h-10 bg-muted"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="pt-1 border-t border-border/60">
+                <label className="text-sm font-medium block mb-1.5">Poids du KPI (%)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={formPoids}
+                  onChange={(e) => setFormPoids(e.target.value)}
+                  className="h-10 w-full max-w-[140px]"
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Répartition parmi les KPI direction actifs (total = 100%)
+                </p>
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Description complémentaire (optionnel)</label>
+
+            {/* Description optionnelle */}
+            <div className="rounded-lg border border-dashed border-border/60 p-4">
+              <label className="text-sm font-medium text-muted-foreground block mb-1.5">
+                Description complémentaire <span className="font-normal">(optionnel)</span>
+              </label>
               <Input
                 value={formDescription}
                 onChange={(e) => setFormDescription(e.target.value)}
-                placeholder="Optionnel"
+                placeholder="Ex. précisions sur la cible ou le périmètre"
+                className="h-10"
               />
             </div>
-            <div className="flex justify-end gap-2">
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
               <Button variant="outline" onClick={() => setModalOpen(false)} disabled={submitting}>
                 Annuler
               </Button>
               <Button onClick={handleSubmitKpi} disabled={submitting}>
-                {submitting ? 'Envoi…' : editKpi ? 'Enregistrer' : 'Créer'}
+                {submitting ? 'Envoi…' : editKpi ? 'Enregistrer' : 'Ajouter le KPI'}
               </Button>
             </div>
           </div>

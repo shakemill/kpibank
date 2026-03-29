@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { peutAssignerA } from '@/lib/assignation-rules'
 
 export async function POST(
   request: NextRequest,
@@ -14,20 +15,28 @@ export async function POST(
   if (Number.isNaN(employeId)) {
     return NextResponse.json({ error: 'ID employé invalide' }, { status: 400 })
   }
-  const assignateurId = parseInt((result.session!.user as { id?: string }).id!, 10)
-  const employe = await prisma.user.findUnique({
-    where: { id: employeId },
-    select: { id: true, managerId: true, role: true },
-  })
-  const roleStr = (result.session!.user as { role?: string }).role ?? ''
-  const peutNotifier =
-    employe &&
-    (employe.managerId === assignateurId ||
-      (roleStr === 'DG' && employe.role === 'DIRECTEUR') ||
-      employe.id === assignateurId)
+  const sessionUser = result.session!.user as {
+    id?: string
+    role?: string
+    serviceId?: number | null
+    directionId?: number | null
+  }
+  const assignateurId = parseInt(sessionUser.id ?? '', 10)
+  if (Number.isNaN(assignateurId)) {
+    return NextResponse.json({ error: 'Session invalide' }, { status: 401 })
+  }
+  const peutNotifier = await peutAssignerA(
+    {
+      id: assignateurId,
+      role: sessionUser.role ?? '',
+      serviceId: sessionUser.serviceId ?? null,
+      directionId: sessionUser.directionId ?? null,
+    },
+    employeId
+  )
   if (!peutNotifier) {
     return NextResponse.json(
-      { error: 'Vous ne pouvez notifier que les KPI de vos collaborateurs directs' },
+      { error: "Vous n'êtes pas autorisé à notifier les KPI de cet utilisateur" },
       { status: 403 }
     )
   }

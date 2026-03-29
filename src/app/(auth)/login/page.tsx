@@ -18,7 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { AlertCircle, Lock, Mail, ArrowRight, CheckCircle } from 'lucide-react'
+import { AlertCircle, Lock, Mail, ArrowRight, CheckCircle, Eye, EyeOff } from 'lucide-react'
 import { useEtablissement } from '@/contexts/etablissement-context'
 
 const loginSchema = z.object({
@@ -30,6 +30,7 @@ type LoginFormValues = z.infer<typeof loginSchema>
 
 function LoginForm() {
   const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const { nom: nomEtablissement } = useEtablissement()
@@ -85,9 +86,7 @@ function LoginForm() {
           <div className="space-y-6">
             <div className="space-y-2">
               <h2 className="text-4xl font-bold leading-tight">
-                Système KPI
-                <br />
-                {nomEtablissement}
+                Système de Gestion des KPI pour Banques
               </h2>
               <p className="text-lg text-white/80 max-w-md">
                 Suivez et mesurez vos indicateurs en temps réel pour atteindre vos objectifs.
@@ -134,7 +133,7 @@ function LoginForm() {
                 priority
               />
             </div>
-            <p className="text-sm text-gray-600">Système KPI — {nomEtablissement}</p>
+            <p className="text-sm text-gray-600">Système de Gestion des KPI pour Banques</p>
           </div>
 
           <div className="space-y-2">
@@ -193,12 +192,21 @@ function LoginForm() {
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                         <Input
-                          type="password"
+                          type={showPassword ? 'text' : 'password'}
                           placeholder="••••••••"
                           disabled={isLoading}
-                          className="pl-10 h-12 border-gray-300 focus:border-[#003369] focus:ring-[#003369] bg-white"
+                          className="pl-10 pr-10 h-12 border-gray-300 focus:border-[#003369] focus:ring-[#003369] bg-white"
                           {...field}
                         />
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          onClick={() => setShowPassword((v) => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                          aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                        >
+                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
                       </div>
                     </FormControl>
                     <FormMessage />
@@ -227,7 +235,7 @@ function LoginForm() {
           </Form>
 
           <p className="text-center text-xs text-gray-500">
-            © 2025 Système KPI — {nomEtablissement}. Tous droits réservés.
+            © 2026 Système de Gestion des KPI pour Banques. Tous droits réservés.
           </p>
         </div>
       </div>

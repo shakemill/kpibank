@@ -136,8 +136,13 @@ export async function GET(
         periode,
       })
     } catch (e) {
+      // #region agent log
+      const errMsg = e instanceof Error ? e.message : String(e)
+      const errStack = e instanceof Error ? e.stack : undefined
+      fetch('http://127.0.0.1:7243/ingest/422b33c5-a92b-402e-9a6b-68ef5ac1298d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'dashboard/employe:catch',message:'consolidation error',data:{error:errMsg,stack:errStack,userId,periodeId},timestamp:Date.now(),hypothesisId:'H1,H2,H3,H4,H5'})}).catch(()=>{});
+      // #endregion
       return NextResponse.json(
-        { error: 'Erreur consolidation', details: e instanceof Error ? e.message : e },
+        { error: 'Erreur consolidation', details: errMsg },
         { status: 500 }
       )
     }
@@ -174,7 +179,7 @@ export async function GET(
       const moisCourant = now.getMonth() + 1
       const anneeCourant = now.getFullYear()
       for (const emp of collaborateurs) {
-        const res = await consolidateEmploye(emp.id, periodeId)
+        const res = await consolidateEmploye(emp.id, periodeId, { includeSoumises: true })
         consolidationByEmploye.set(emp.id, res)
         const nbKpi = res.details.length
         const nbValides = res.details.filter((d) => d.tauxAtteinte >= 100).length
@@ -370,13 +375,25 @@ export async function GET(
         }
         heatmapRows.push({ serviceNom: svc.nom, kpi: kpiRatesFinal })
 
+        // Score par employé à partir des scorePeriodes déjà chargés (évite N appels consolidateEmploye)
+        const scoreByEmploye = new Map<number, { sumPond: number; sumPoids: number }>()
+        for (const ke of kpiEmployesSvc) {
+          const sp = ke.scorePeriodes[0]
+          if (sp) {
+            const cur = scoreByEmploye.get(ke.employeId) ?? { sumPond: 0, sumPoids: 0 }
+            cur.sumPond += sp.taux_atteinte * ke.poids
+            cur.sumPoids += ke.poids
+            scoreByEmploye.set(ke.employeId, cur)
+          }
+        }
         const employes = await prisma.user.findMany({
           where: { serviceId: svc.id, role: 'EMPLOYE', actif: true },
           select: { id: true, nom: true, prenom: true },
         })
         for (const u of employes) {
-          const r = await consolidateEmploye(u.id, periodeId)
-          employeScoresForTop.push({ nom: u.nom, prenom: u.prenom, score: r.scoreGlobal })
+          const o = scoreByEmploye.get(u.id)
+          const score = o && o.sumPoids > 0 ? o.sumPond / o.sumPoids : 0
+          employeScoresForTop.push({ nom: u.nom, prenom: u.prenom, score })
         }
       }
       const sorted = [...employeScoresForTop].sort((a, b) => b.score - a.score)
@@ -450,15 +467,38 @@ export async function GET(
         }[] = []
         for (const svc of services) {
           const consSvc = await consolidateService(svc.id, periodeId)
-          const employes = await prisma.user.findMany({
-            where: { serviceId: svc.id, role: 'EMPLOYE', actif: true },
-            select: { id: true, nom: true, prenom: true },
+          const kpiEmployesSvc = await prisma.kpiEmploye.findMany({
+            where: { kpiService: { serviceId: svc.id }, periodeId },
+            select: {
+              employeId: true,
+              poids: true,
+              scorePeriodes: { where: { periodeId }, select: { taux_atteinte: true } },
+              employe: { select: { nom: true, prenom: true } },
+            },
           })
-          const employeScores: { nom: string; prenom: string; score: number }[] = []
-          for (const u of employes) {
-            const r = await consolidateEmploye(u.id, periodeId)
-            employeScores.push({ nom: u.nom, prenom: u.prenom, score: r.scoreGlobal })
+          const scoreByEmploye = new Map<number, { sumPond: number; sumPoids: number; nom: string; prenom: string }>()
+          for (const ke of kpiEmployesSvc) {
+            const sp = ke.scorePeriodes[0]
+            if (sp) {
+              const cur = scoreByEmploye.get(ke.employeId)
+              if (cur) {
+                cur.sumPond += sp.taux_atteinte * ke.poids
+                cur.sumPoids += ke.poids
+              } else {
+                scoreByEmploye.set(ke.employeId, {
+                  sumPond: sp.taux_atteinte * ke.poids,
+                  sumPoids: ke.poids,
+                  nom: ke.employe.nom,
+                  prenom: ke.employe.prenom,
+                })
+              }
+            }
           }
+          const employeScores = Array.from(scoreByEmploye.entries()).map(([, o]) => ({
+            nom: o.nom,
+            prenom: o.prenom,
+            score: o.sumPoids > 0 ? o.sumPond / o.sumPoids : 0,
+          }))
           serviceRows.push({
             serviceId: svc.id,
             serviceNom: svc.nom,

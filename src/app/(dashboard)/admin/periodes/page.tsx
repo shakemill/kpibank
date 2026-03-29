@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { format } from 'date-fns'
+import { fr } from 'date-fns/locale'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import {
@@ -39,6 +41,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Calendar as CalendarIcon, Plus, Play, Lock, ListChecks, ArrowLeft, CalendarClock, Filter, X } from 'lucide-react'
+import { Calendar } from '@/components/ui/calendar'
+import { cn } from '@/lib/utils'
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -49,7 +59,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { TableSkeleton } from '@/components/table-skeleton'
-import { Calendar, Plus, Play, Lock, ListChecks, ArrowLeft, CalendarClock, Filter, X } from 'lucide-react'
 
 type PeriodeRow = {
   id: number
@@ -77,6 +86,24 @@ function formatDate(s: string) {
   } catch {
     return s
   }
+}
+
+/** Format court et lisible pour le tableau (ex. "15 janv. 2026") */
+function formatDateShort(s: string) {
+  try {
+    const d = new Date(s)
+    return format(d, 'd MMM yyyy', { locale: fr })
+  } catch {
+    return s
+  }
+}
+
+function toInputDate(d: Date | undefined): string {
+  if (!d) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 function formatType(type: string) {
@@ -220,7 +247,7 @@ export default function AdminPeriodesPage() {
           </Button>
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 shadow-sm shrink-0">
-              <Calendar className="h-6 w-6 text-primary" />
+              <CalendarIcon className="h-6 w-6 text-primary" />
             </div>
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Périodes d&apos;évaluation</h1>
@@ -359,20 +386,52 @@ export default function AdminPeriodesPage() {
                   <SelectItem value="CLOTUREE">Clôturée</SelectItem>
                 </SelectContent>
               </Select>
-              <Input
-                type="date"
-                placeholder="Date début"
-                value={filterDateDebut}
-                onChange={(e) => setFilterDateDebut(e.target.value)}
-                className="w-[150px] h-9"
-              />
-              <Input
-                type="date"
-                placeholder="Date fin"
-                value={filterDateFin}
-                onChange={(e) => setFilterDateFin(e.target.value)}
-                className="w-[150px] h-9"
-              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'w-[160px] h-9 justify-start text-left font-normal',
+                      !filterDateDebut && 'text-muted-foreground'
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    {filterDateDebut ? formatDateShort(filterDateDebut) : 'Du'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={filterDateDebut ? new Date(filterDateDebut) : undefined}
+                    onSelect={(d) => setFilterDateDebut(d ? toInputDate(d) : '')}
+                    locale={fr}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'w-[160px] h-9 justify-start text-left font-normal',
+                      !filterDateFin && 'text-muted-foreground'
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    {filterDateFin ? formatDateShort(filterDateFin) : 'Au'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={filterDateFin ? new Date(filterDateFin) : undefined}
+                    onSelect={(d) => setFilterDateFin(d ? toInputDate(d) : '')}
+                    locale={fr}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" className="gap-1.5 h-9" onClick={clearFilters}>
                   <X className="h-4 w-4" />
@@ -433,9 +492,24 @@ export default function AdminPeriodesPage() {
                       <TableRow key={p.id} className="group">
                         <TableCell className="font-medium">{p.code}</TableCell>
                         <TableCell className="text-muted-foreground">{formatType(p.type)}</TableCell>
-                        <TableCell>{formatDate(p.date_debut)}</TableCell>
-                        <TableCell>{formatDate(p.date_fin)}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(p.date_limite_saisie)}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-2 tabular-nums">
+                            <CalendarIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                            {formatDateShort(p.date_debut)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-2 tabular-nums">
+                            <CalendarIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                            {formatDateShort(p.date_fin)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          <span className="inline-flex items-center gap-2 tabular-nums">
+                            <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
+                            {formatDateShort(p.date_limite_saisie)}
+                          </span>
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={statutConfig.className}>
                             {statutConfig.label}

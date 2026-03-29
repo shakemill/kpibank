@@ -140,9 +140,9 @@ export default function DirecteurServicesPage() {
 
   const chartData = services.map((s) => ({
     name: s.nom,
-    taux: Math.round(s.tauxAtteinte * 100) / 100,
+    taux: Math.round(s.tauxAtteinte * 10) / 10,
     fill:
-      s.tauxAtteinte >= 0.9 ? '#22c55e' : s.tauxAtteinte >= 0.7 ? '#f97316' : '#ef4444',
+      s.tauxAtteinte >= 90 ? '#22c55e' : s.tauxAtteinte >= 70 ? '#f97316' : '#ef4444',
   }))
 
   return (
@@ -227,8 +227,15 @@ export default function DirecteurServicesPage() {
             {services.map((svc) => (
               <Card key={svc.id} className="border-border/50">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center justify-between">
-                    <span>{svc.nom}</span>
+                  <CardTitle className="text-base flex items-center justify-between flex-wrap gap-2">
+                    <span className="flex items-center gap-2">
+                      {svc.nom}
+                      {svc.kpiActifs === 0 && (
+                        <Badge variant="secondary" className="text-muted-foreground font-normal text-xs">
+                          Pas encore de KPI
+                        </Badge>
+                      )}
+                    </span>
                     {!svc.actif && (
                       <Badge variant="outline" className="text-muted-foreground">Inactif</Badge>
                     )}
@@ -244,14 +251,14 @@ export default function DirecteurServicesPage() {
                     <span className="text-muted-foreground">Taux atteinte</span>
                     <span
                       className={
-                        svc.tauxAtteinte >= 0.9
+                        svc.tauxAtteinte >= 90
                           ? 'text-green-600 font-medium'
-                          : svc.tauxAtteinte >= 0.7
+                          : svc.tauxAtteinte >= 70
                             ? 'text-orange-600'
                             : 'text-red-600'
                       }
                     >
-                      {(svc.tauxAtteinte * 100).toFixed(1)}%
+                      {svc.tauxAtteinte.toFixed(1)}%
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
@@ -267,7 +274,7 @@ export default function DirecteurServicesPage() {
                   <Button variant="outline" size="sm" className="w-full mt-2 gap-2" asChild>
                     <Link href={`/chef-service/kpi-service?serviceId=${svc.id}`}>
                       <Target className="h-4 w-4" />
-                      Voir les KPI
+                      Voir les KPI {svc.kpiActifs != null ? `(${svc.kpiActifs})` : ''}
                     </Link>
                   </Button>
                 </CardContent>
@@ -337,7 +344,16 @@ export default function DirecteurServicesPage() {
                   <TableBody>
                     {services.map((svc) => (
                       <TableRow key={svc.id}>
-                        <TableCell className="font-medium">{svc.nom}</TableCell>
+                        <TableCell className="font-medium">
+                          <span className="flex items-center gap-2">
+                            {svc.nom}
+                            {svc.kpiActifs === 0 && (
+                              <Badge variant="secondary" className="text-muted-foreground font-normal text-xs">
+                                Pas encore de KPI
+                              </Badge>
+                            )}
+                          </span>
+                        </TableCell>
                         <TableCell>{svc.code}</TableCell>
                         <TableCell>
                           {svc.responsable
@@ -349,14 +365,14 @@ export default function DirecteurServicesPage() {
                         <TableCell className="text-right">
                           <span
                             className={
-                              svc.tauxAtteinte >= 0.9
+                              svc.tauxAtteinte >= 90
                                 ? 'text-green-600'
-                                : svc.tauxAtteinte >= 0.7
+                                : svc.tauxAtteinte >= 70
                                   ? 'text-orange-600'
                                   : 'text-red-600'
                             }
                           >
-                            {(svc.tauxAtteinte * 100).toFixed(1)}%
+                            {svc.tauxAtteinte.toFixed(1)}%
                           </span>
                         </TableCell>
                         <TableCell>
@@ -369,7 +385,7 @@ export default function DirecteurServicesPage() {
                             <Button variant="ghost" size="sm" asChild>
                               <Link href={`/chef-service/kpi-service?serviceId=${svc.id}`} className="gap-1">
                                 <Target className="h-4 w-4" />
-                                KPI
+                                KPI {svc.kpiActifs != null ? `(${svc.kpiActifs})` : ''}
                               </Link>
                             </Button>
                             <Button variant="ghost" size="sm" asChild>

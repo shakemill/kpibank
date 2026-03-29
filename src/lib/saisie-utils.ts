@@ -149,24 +149,30 @@ export function calculerCibleMensuelle(
         explication: `${ciblePeriode} ÷ ${nbMoisPeriode} mois`,
       }
     }
-    case 'MOYENNE':
+    case 'MOYENNE': {
+      const cibleMois = Math.round(ciblePeriode * 100) / 100
       return {
-        cibleMois: ciblePeriode,
-        label: `${ciblePeriode} ce mois`,
+        cibleMois,
+        label: `${cibleMois.toFixed(1)} ce mois`,
         explication: 'Cible identique chaque mois',
       }
-    case 'DERNIER':
+    }
+    case 'DERNIER': {
+      const cibleMois = Math.round(ciblePeriode * 100) / 100
       return {
-        cibleMois: ciblePeriode,
-        label: `Objectif final : ${ciblePeriode}`,
+        cibleMois,
+        label: `Objectif final : ${cibleMois.toFixed(1)}`,
         explication: 'Valeur à atteindre en fin de période',
       }
-    default:
+    }
+    default: {
+      const cibleMois = Math.round(ciblePeriode * 100) / 100
       return {
-        cibleMois: ciblePeriode,
-        label: `${ciblePeriode}`,
+        cibleMois,
+        label: `${cibleMois.toFixed(1)}`,
         explication: '',
       }
+    }
   }
 }
 
@@ -191,16 +197,19 @@ export function calculerCibleAttenduADate(
 }
 
 /**
- * Calcule le réalisé cumulé depuis le début de la période (saisies validées ou ajustées).
+ * Calcule le réalisé cumulé depuis le début de la période.
+ * @param inclureBrouillons - si true, inclut OUVERTE et EN_RETARD (pour afficher la progression en temps réel à l'employé)
  */
 export function calculerRealiseCumule(
   saisies: SaisieMensuelleForCumul[],
   modeAgregation: ModeAgregation,
-  moisCourant: number
+  moisCourant: number,
+  inclureBrouillons = false
 ): number {
-  const saisiesValidees = saisies.filter(
-    (s) => s.statut === 'VALIDEE' || s.statut === 'AJUSTEE'
-  )
+  const statutsInclus = inclureBrouillons
+    ? ['VALIDEE', 'AJUSTEE', 'OUVERTE', 'EN_RETARD']
+    : ['VALIDEE', 'AJUSTEE']
+  const saisiesValidees = saisies.filter((s) => statutsInclus.includes(s.statut))
 
   switch (modeAgregation) {
     case 'CUMUL':

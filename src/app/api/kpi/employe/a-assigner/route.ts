@@ -121,11 +121,17 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  const rattachesDirects = list.filter((c) => c.directionId != null && c.serviceId == null)
+  // Rattachés directs = employés uniquement, rattachés à une direction sans service
+  const rattachesDirects = list.filter(
+    (c) => c.role === 'EMPLOYE' && c.directionId != null && c.serviceId == null
+  )
   const directeurs = list.filter((c) => c.role === 'DIRECTEUR')
   const chefsService = list.filter((c) => c.role === 'CHEF_SERVICE')
   const managers = list.filter((c) => c.role === 'MANAGER')
-  const employes = list.filter((c) => c.role === 'EMPLOYE')
+  // Employés non rattachés directs (avec un service ou sans direction)
+  const employes = list.filter(
+    (c) => c.role === 'EMPLOYE' && (c.directionId == null || c.serviceId != null)
+  )
 
   return NextResponse.json({
     collaborateurs: list,

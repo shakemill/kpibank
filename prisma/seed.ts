@@ -494,52 +494,52 @@ async function main() {
   // 8. CATALOGUE KPI
   // ─────────────────────────────────────────
   const cat1 = await prisma.catalogueKpi.create({
-    data: { nom: 'Volume crédits accordés', unite: 'M MAD', type: 'QUANTITATIF', mode_agregation: 'CUMUL', actif: true },
+    data: { nom: 'Volume crédits accordés', description: 'Montant total des crédits accordés sur la période (M MAD).', unite: 'M MAD', type: 'QUANTITATIF', mode_agregation: 'CUMUL', actif: true },
   })
   const cat2 = await prisma.catalogueKpi.create({
-    data: { nom: 'Nombre de dossiers traités', unite: 'dossiers', type: 'QUANTITATIF', mode_agregation: 'CUMUL', actif: true },
+    data: { nom: 'Nombre de dossiers traités', description: 'Nombre total de dossiers traités sur la période.', unite: 'dossiers', type: 'QUANTITATIF', mode_agregation: 'CUMUL', actif: true },
   })
   const cat3 = await prisma.catalogueKpi.create({
-    data: { nom: 'Nombre de nouveaux clients', unite: 'clients', type: 'QUANTITATIF', mode_agregation: 'CUMUL', actif: true },
+    data: { nom: 'Nombre de nouveaux clients', description: 'Nombre de nouveaux clients acquis sur la période.', unite: 'clients', type: 'QUANTITATIF', mode_agregation: 'CUMUL', actif: true },
   })
   const cat4 = await prisma.catalogueKpi.create({
-    data: { nom: 'Taux de recouvrement', unite: '%', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
+    data: { nom: 'Taux de recouvrement', description: 'Taux de recouvrement des créances par rapport aux objectifs.', unite: '%', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
   })
   const cat5 = await prisma.catalogueKpi.create({
-    data: { nom: 'Délai moyen traitement dossier', unite: 'jours', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
+    data: { nom: 'Délai moyen traitement dossier', description: 'Délai moyen entre la réception et le traitement complet d\'un dossier (en jours).', unite: 'jours', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
   })
   const cat6 = await prisma.catalogueKpi.create({
-    data: { nom: 'Taux de réalisation budgétaire', unite: '%', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
+    data: { nom: 'Taux de réalisation budgétaire', description: 'Pourcentage de réalisation par rapport au budget prévu sur la période.', unite: '%', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
   })
   const cat7 = await prisma.catalogueKpi.create({
-    data: { nom: "Nombre de reportings remis à temps", unite: 'rapports', type: 'QUANTITATIF', mode_agregation: 'CUMUL', actif: true },
+    data: { nom: "Nombre de reportings remis à temps", description: 'Nombre de reportings ou rapports remis dans les délais convenus.', unite: 'rapports', type: 'QUANTITATIF', mode_agregation: 'CUMUL', actif: true },
   })
   const cat8 = await prisma.catalogueKpi.create({
-    data: { nom: "Taux de complétion des entretiens", unite: '%', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
+    data: { nom: "Taux de complétion des entretiens", unite: '%', description: 'Part des entretiens annuels ou d\'évaluation réalisés dans les délais.', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
   })
   const cat9 = await prisma.catalogueKpi.create({
-    data: { nom: "Score moyen de l'équipe", unite: '%', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
+    data: { nom: "Score moyen de l'équipe", description: 'Score global moyen de l\'équipe (taux d\'atteinte des objectifs).', unite: '%', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
   })
   const cat10 = await prisma.catalogueKpi.create({
-    data: { nom: "Délai moyen de validation saisies", unite: 'jours', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
+    data: { nom: "Délai moyen de validation saisies", description: 'Délai moyen entre la soumission et la validation des saisies (en jours).', unite: 'jours', type: 'QUANTITATIF', mode_agregation: 'MOYENNE', actif: true },
   })
   const cat11 = await prisma.catalogueKpi.create({
-    data: { nom: 'Satisfaction client', unite: '/5', type: 'QUALITATIF', mode_agregation: 'MOYENNE', actif: true },
+    data: { nom: 'Satisfaction client', description: 'Score de satisfaction client issu des enquêtes ou retours (échelle /5).', unite: '/5', type: 'QUALITATIF', mode_agregation: 'MOYENNE', actif: true },
   })
   const cat12 = await prisma.catalogueKpi.create({
-    data: { nom: 'Qualité des rapports', unite: '/5', type: 'QUALITATIF', mode_agregation: 'MOYENNE', actif: true },
+    data: { nom: 'Qualité des rapports', description: 'Évaluation qualitative des rapports produits (exhaustivité, clarté, délais).', unite: '/5', type: 'QUALITATIF', mode_agregation: 'MOYENNE', actif: true },
   })
   const cat13 = await prisma.catalogueKpi.create({
-    data: { nom: 'Maîtrise des outils CRM', unite: 'niveau/4', type: 'COMPORTEMENTAL', mode_agregation: 'DERNIER', actif: true },
+    data: { nom: 'Maîtrise des outils CRM', description: 'Niveau de maîtrise et d\'utilisation des outils CRM au quotidien.', unite: 'niveau/4', type: 'COMPORTEMENTAL', mode_agregation: 'DERNIER', actif: true },
   })
   const cat14 = await prisma.catalogueKpi.create({
-    data: { nom: 'Gestion du risque', unite: 'niveau/4', type: 'COMPORTEMENTAL', mode_agregation: 'DERNIER', actif: true },
+    data: { nom: 'Gestion du risque', description: 'Capacité à identifier, évaluer et maîtriser les risques dans l\'activité.', unite: 'niveau/4', type: 'COMPORTEMENTAL', mode_agregation: 'DERNIER', actif: true },
   })
   const cat15 = await prisma.catalogueKpi.create({
-    data: { nom: 'Leadership et communication', unite: 'niveau/4', type: 'COMPORTEMENTAL', mode_agregation: 'DERNIER', actif: true },
+    data: { nom: 'Leadership et communication', description: 'Capacité à animer, communiquer et fédérer les équipes.', unite: 'niveau/4', type: 'COMPORTEMENTAL', mode_agregation: 'DERNIER', actif: true },
   })
   const cat16 = await prisma.catalogueKpi.create({
-    data: { nom: 'Développement des équipes', unite: 'niveau/4', type: 'COMPORTEMENTAL', mode_agregation: 'DERNIER', actif: true },
+    data: { nom: 'Développement des équipes', description: 'Contribution au développement des compétences et à l\'accompagnement des collaborateurs.', unite: 'niveau/4', type: 'COMPORTEMENTAL', mode_agregation: 'DERNIER', actif: true },
   })
 
   // ─────────────────────────────────────────
@@ -842,6 +842,345 @@ async function main() {
       { kpiEmployeId: kpiEmp2.id, periodeId: perS1_2025.id, valeur_agregee: 4.3, taux_atteinte: 107.5, calcule_le: now },
       { kpiEmployeId: kpiEmp3.id, periodeId: perS1_2025.id, valeur_agregee: 3, taux_atteinte: 75, calcule_le: now },
     ],
+  })
+
+  // ─────────────────────────────────────────
+  // 15b. DIRECTION DSI + SERVICES
+  // ─────────────────────────────────────────
+  const dirDsi = await prisma.direction.create({
+    data: {
+      nom: 'Direction des Systèmes d\'Information',
+      code: 'DIR_DSI',
+      etablissementId: etab.id,
+      actif: true,
+    },
+  })
+  const srvInfra = await prisma.service.create({
+    data: {
+      nom: 'Infrastructure & Exploitation',
+      code: 'SRV_INFRA',
+      directionId: dirDsi.id,
+      actif: true,
+    },
+  })
+  const srvDev = await prisma.service.create({
+    data: {
+      nom: 'Développement & Projets',
+      code: 'SRV_DEV',
+      directionId: dirDsi.id,
+      actif: true,
+    },
+  })
+
+  // ─────────────────────────────────────────
+  // 15c. UTILISATEURS DSI (Password123!)
+  // ─────────────────────────────────────────
+  const usrDirDsi = await prisma.user.create({
+    data: {
+      nom: 'Mansouri',
+      prenom: 'Rachid',
+      email: 'dir.dsi@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'DIRECTEUR',
+      directionId: dirDsi.id,
+      managerId: usrDg.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrCsInfra = await prisma.user.create({
+    data: {
+      nom: 'Boutaleb',
+      prenom: 'Imane',
+      email: 'chef.infra@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'CHEF_SERVICE',
+      serviceId: srvInfra.id,
+      managerId: usrDirDsi.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrCsDev = await prisma.user.create({
+    data: {
+      nom: 'Chraibi',
+      prenom: 'Nabil',
+      email: 'chef.dev@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'CHEF_SERVICE',
+      serviceId: srvDev.id,
+      managerId: usrDirDsi.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrMgrInfra = await prisma.user.create({
+    data: {
+      nom: 'Ait Brahim',
+      prenom: 'Youssef',
+      email: 'manager.infra@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'MANAGER',
+      serviceId: srvInfra.id,
+      managerId: usrCsInfra.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrMgrDev = await prisma.user.create({
+    data: {
+      nom: 'Saidi',
+      prenom: 'Houda',
+      email: 'manager.dev@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'MANAGER',
+      serviceId: srvDev.id,
+      managerId: usrCsDev.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrEmpInfra1 = await prisma.user.create({
+    data: {
+      nom: 'Bennani',
+      prenom: 'Khalid',
+      email: 'khalid.bennani@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'EMPLOYE',
+      serviceId: srvInfra.id,
+      managerId: usrMgrInfra.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrEmpInfra2 = await prisma.user.create({
+    data: {
+      nom: 'El Ouafi',
+      prenom: 'Sanaa',
+      email: 'sanaa.elouafi@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'EMPLOYE',
+      serviceId: srvInfra.id,
+      managerId: usrMgrInfra.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrEmpInfra3 = await prisma.user.create({
+    data: {
+      nom: 'Tlemcani',
+      prenom: 'Rachid',
+      email: 'rachid.tlemcani@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'EMPLOYE',
+      serviceId: srvInfra.id,
+      managerId: usrMgrInfra.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrEmpDev1 = await prisma.user.create({
+    data: {
+      nom: 'Zouari',
+      prenom: 'Amine',
+      email: 'amine.zouari@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'EMPLOYE',
+      serviceId: srvDev.id,
+      managerId: usrMgrDev.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrEmpDev2 = await prisma.user.create({
+    data: {
+      nom: 'Idali',
+      prenom: 'Fatima Zahra',
+      email: 'fz.idali@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'EMPLOYE',
+      serviceId: srvDev.id,
+      managerId: usrMgrDev.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+  const usrEmpDev3 = await prisma.user.create({
+    data: {
+      nom: 'Naciri',
+      prenom: 'Karim',
+      email: 'karim.naciri@banque.ma',
+      password: PASSWORD_HASH,
+      role: 'EMPLOYE',
+      serviceId: srvDev.id,
+      managerId: usrMgrDev.id,
+      actif: true,
+      force_password_change: false,
+    },
+  })
+
+  await prisma.direction.update({ where: { id: dirDsi.id }, data: { responsableId: usrDirDsi.id } })
+  await prisma.service.update({ where: { id: srvInfra.id }, data: { responsableId: usrCsInfra.id } })
+  await prisma.service.update({ where: { id: srvDev.id }, data: { responsableId: usrCsDev.id } })
+
+  // ─────────────────────────────────────────
+  // 15d. CATALOGUE KPI 17-31 (ajouter si pas déjà présents)
+  // ─────────────────────────────────────────
+  const getOrCreateCatalogue = async (nom: string, type: 'QUANTITATIF' | 'QUALITATIF' | 'COMPORTEMENTAL', unite: string, mode: 'CUMUL' | 'MOYENNE' | 'DERNIER', description?: string) => {
+    const existing = await prisma.catalogueKpi.findFirst({ where: { nom } })
+    if (existing) return existing
+    const created = await prisma.catalogueKpi.create({
+      data: { nom, type, unite, mode_agregation: mode, actif: true, description: description ?? null },
+    })
+    return created
+  }
+  const cat17 = await getOrCreateCatalogue('Disponibilité systèmes', 'QUANTITATIF', '%', 'MOYENNE', 'Taux de disponibilité des applications et systèmes critiques.')
+  const cat18 = await getOrCreateCatalogue('Délai résolution incidents', 'QUANTITATIF', 'heures', 'MOYENNE', 'Délai moyen de résolution des incidents (SLA).')
+  const cat19 = await getOrCreateCatalogue('Livraison projets dans les délais', 'QUANTITATIF', '%', 'MOYENNE', 'Part des livraisons réalisées dans les délais prévus.')
+  const cat20 = await getOrCreateCatalogue('Satisfaction utilisateurs internes', 'QUALITATIF', '/5', 'MOYENNE', 'Score de satisfaction des utilisateurs internes des services livrés.')
+  const cat21 = await getOrCreateCatalogue('Taux sauvegardes réussies', 'QUANTITATIF', '%', 'MOYENNE', 'Pourcentage de sauvegardes exécutées et validées avec succès.')
+  const cat22 = await getOrCreateCatalogue('Taux bugs post-livraison', 'QUANTITATIF', '%', 'MOYENNE', 'Part des bugs détectés après livraison par rapport au total des anomalies.')
+  const cat23 = await getOrCreateCatalogue('Vélocité équipe (story points)', 'QUANTITATIF', 'SP/sprint', 'MOYENNE', 'Nombre de story points livrés par sprint (vélocité).')
+  const cat24 = await getOrCreateCatalogue('Couverture tests unitaires', 'QUANTITATIF', '%', 'MOYENNE', 'Pourcentage du code couvert par les tests unitaires.')
+  const cat25 = await getOrCreateCatalogue('Score accessibilité Lighthouse', 'QUANTITATIF', 'score', 'MOYENNE', 'Score Lighthouse (performance, accessibilité) des applications.')
+  const cat26 = await getOrCreateCatalogue('Tickets N1 traités', 'QUANTITATIF', 'tickets', 'CUMUL', 'Nombre de tickets de premier niveau traités sur la période.')
+  const cat27 = await getOrCreateCatalogue('Jalons projets livrés', 'QUANTITATIF', '%', 'MOYENNE', 'Part des jalons projet livrés dans les délais.')
+  const cat28 = await getOrCreateCatalogue('Risques identifiés et mitigés', 'QUANTITATIF', '%', 'MOYENNE', 'Part des risques identifiés pour lesquels une action de mitigation est en place.')
+  const cat29 = await getOrCreateCatalogue('Maîtrise outils supervision', 'COMPORTEMENTAL', 'niveau/4', 'DERNIER', 'Niveau de maîtrise des outils de monitoring et supervision.')
+  const cat30 = await getOrCreateCatalogue('Qualité du code', 'COMPORTEMENTAL', 'niveau/4', 'DERNIER', 'Niveau de qualité du code (revues, bonnes pratiques).')
+  const cat31 = await getOrCreateCatalogue('Maîtrise Next.js/TypeScript', 'COMPORTEMENTAL', 'niveau/4', 'DERNIER', 'Niveau de maîtrise des technologies Next.js et TypeScript.')
+
+  // ─────────────────────────────────────────
+  // 15e. KPI DIRECTION DSI (S1-2025) — somme poids = 100%
+  // ─────────────────────────────────────────
+  const kpiDirDsi1 = await prisma.kpiDirection.create({
+    data: { catalogueKpiId: cat17.id, directionId: dirDsi.id, periodeId: perS1_2025.id, cible: 99.5, poids: 35, statut: 'ACTIF', creeParId: usrDirDsi.id },
+  })
+  const kpiDirDsi2 = await prisma.kpiDirection.create({
+    data: { catalogueKpiId: cat18.id, directionId: dirDsi.id, periodeId: perS1_2025.id, cible: 4, poids: 30, statut: 'ACTIF', creeParId: usrDirDsi.id },
+  })
+  const kpiDirDsi3 = await prisma.kpiDirection.create({
+    data: { catalogueKpiId: cat19.id, directionId: dirDsi.id, periodeId: perS1_2025.id, cible: 80, poids: 25, statut: 'ACTIF', creeParId: usrDirDsi.id },
+  })
+  const kpiDirDsi4 = await prisma.kpiDirection.create({
+    data: { catalogueKpiId: cat20.id, directionId: dirDsi.id, periodeId: perS1_2025.id, cible: 4.0, poids: 10, statut: 'ACTIF', creeParId: usrDirDsi.id },
+  })
+
+  // ─────────────────────────────────────────
+  // 15f. KPI SERVICE INFRA (S1-2025) — somme poids = 100%
+  // ─────────────────────────────────────────
+  const kpiSrvInfra1 = await prisma.kpiService.create({
+    data: { catalogueKpiId: cat17.id, serviceId: srvInfra.id, periodeId: perS1_2025.id, kpiDirectionId: kpiDirDsi1.id, poids_dans_direction: 50, cible: 99.8, poids: 40, statut: 'ACTIF', creeParId: usrCsInfra.id },
+  })
+  const kpiSrvInfra2 = await prisma.kpiService.create({
+    data: { catalogueKpiId: cat18.id, serviceId: srvInfra.id, periodeId: perS1_2025.id, kpiDirectionId: kpiDirDsi2.id, poids_dans_direction: 60, cible: 3, poids: 35, statut: 'ACTIF', creeParId: usrCsInfra.id },
+  })
+  const kpiSrvInfra3 = await prisma.kpiService.create({
+    data: { catalogueKpiId: cat21.id, serviceId: srvInfra.id, periodeId: perS1_2025.id, kpiDirectionId: kpiDirDsi1.id, poids_dans_direction: 50, cible: 100, poids: 25, statut: 'ACTIF', creeParId: usrCsInfra.id },
+  })
+
+  // ─────────────────────────────────────────
+  // 15g. KPI SERVICE DEV (S1-2025) — somme poids = 100%
+  // ─────────────────────────────────────────
+  const kpiSrvDev1 = await prisma.kpiService.create({
+    data: { catalogueKpiId: cat19.id, serviceId: srvDev.id, periodeId: perS1_2025.id, kpiDirectionId: kpiDirDsi3.id, poids_dans_direction: 100, cible: 80, poids: 35, statut: 'ACTIF', creeParId: usrCsDev.id },
+  })
+  const kpiSrvDev2 = await prisma.kpiService.create({
+    data: { catalogueKpiId: cat22.id, serviceId: srvDev.id, periodeId: perS1_2025.id, kpiDirectionId: kpiDirDsi1.id, poids_dans_direction: null, cible: 2, poids: 30, statut: 'ACTIF', creeParId: usrCsDev.id },
+  })
+  const kpiSrvDev3 = await prisma.kpiService.create({
+    data: { catalogueKpiId: cat23.id, serviceId: srvDev.id, periodeId: perS1_2025.id, kpiDirectionId: null, poids_dans_direction: null, cible: 40, poids: 20, statut: 'ACTIF', creeParId: usrCsDev.id },
+  })
+  const kpiSrvDev4 = await prisma.kpiService.create({
+    data: { catalogueKpiId: cat20.id, serviceId: srvDev.id, periodeId: perS1_2025.id, kpiDirectionId: kpiDirDsi4.id, poids_dans_direction: 70, cible: 4.0, poids: 15, statut: 'ACTIF', creeParId: usrCsDev.id },
+  })
+
+  // ─────────────────────────────────────────
+  // 15h. KPI EMPLOYÉS — Khalid Bennani (3 KPI, 100%)
+  // ─────────────────────────────────────────
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat17.id, employeId: usrEmpInfra1.id, assigneParId: usrMgrInfra.id, kpiServiceId: kpiSrvInfra1.id, periodeId: perS1_2025.id, cible: 99.9, poids: 40, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat18.id, employeId: usrEmpInfra1.id, assigneParId: usrMgrInfra.id, kpiServiceId: kpiSrvInfra2.id, periodeId: perS1_2025.id, cible: 2, poids: 35, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat29.id, employeId: usrEmpInfra1.id, assigneParId: usrMgrInfra.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 3, poids: 25, statut: 'VALIDE' },
+  })
+
+  // KPI Sanaa El Ouafi (3 KPI, 100%)
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat17.id, employeId: usrEmpInfra2.id, assigneParId: usrMgrInfra.id, kpiServiceId: kpiSrvInfra1.id, periodeId: perS1_2025.id, cible: 99.8, poids: 45, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat18.id, employeId: usrEmpInfra2.id, assigneParId: usrMgrInfra.id, kpiServiceId: kpiSrvInfra2.id, periodeId: perS1_2025.id, cible: 4, poids: 30, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat14.id, employeId: usrEmpInfra2.id, assigneParId: usrMgrInfra.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 3, poids: 25, statut: 'VALIDE' },
+  })
+
+  // KPI Rachid Tlemcani (3 KPI, 100%)
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat21.id, employeId: usrEmpInfra3.id, assigneParId: usrMgrInfra.id, kpiServiceId: kpiSrvInfra3.id, periodeId: perS1_2025.id, cible: 100, poids: 50, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat26.id, employeId: usrEmpInfra3.id, assigneParId: usrMgrInfra.id, kpiServiceId: kpiSrvInfra2.id, periodeId: perS1_2025.id, cible: 80, poids: 30, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat12.id, employeId: usrEmpInfra3.id, assigneParId: usrMgrInfra.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 4.0, poids: 20, statut: 'VALIDE' },
+  })
+
+  // KPI Amine Zouari (4 KPI, 100%)
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat19.id, employeId: usrEmpDev1.id, assigneParId: usrMgrDev.id, kpiServiceId: kpiSrvDev1.id, periodeId: perS1_2025.id, cible: 90, poids: 35, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat24.id, employeId: usrEmpDev1.id, assigneParId: usrMgrDev.id, kpiServiceId: kpiSrvDev2.id, periodeId: perS1_2025.id, cible: 80, poids: 30, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat23.id, employeId: usrEmpDev1.id, assigneParId: usrMgrDev.id, kpiServiceId: kpiSrvDev3.id, periodeId: perS1_2025.id, cible: 12, poids: 25, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat30.id, employeId: usrEmpDev1.id, assigneParId: usrMgrDev.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 3, poids: 10, statut: 'VALIDE' },
+  })
+
+  // KPI Fatima Zahra Idali (4 KPI, 100%)
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat19.id, employeId: usrEmpDev2.id, assigneParId: usrMgrDev.id, kpiServiceId: kpiSrvDev1.id, periodeId: perS1_2025.id, cible: 90, poids: 35, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat25.id, employeId: usrEmpDev2.id, assigneParId: usrMgrDev.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 85, poids: 30, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat22.id, employeId: usrEmpDev2.id, assigneParId: usrMgrDev.id, kpiServiceId: kpiSrvDev2.id, periodeId: perS1_2025.id, cible: 3, poids: 25, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat31.id, employeId: usrEmpDev2.id, assigneParId: usrMgrDev.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 4, poids: 10, statut: 'VALIDE' },
+  })
+
+  // KPI Karim Naciri (4 KPI, 100%)
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat27.id, employeId: usrEmpDev3.id, assigneParId: usrMgrDev.id, kpiServiceId: kpiSrvDev1.id, periodeId: perS1_2025.id, cible: 85, poids: 40, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat20.id, employeId: usrEmpDev3.id, assigneParId: usrMgrDev.id, kpiServiceId: kpiSrvDev4.id, periodeId: perS1_2025.id, cible: 4.2, poids: 30, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat28.id, employeId: usrEmpDev3.id, assigneParId: usrMgrDev.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 90, poids: 20, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat15.id, employeId: usrEmpDev3.id, assigneParId: usrMgrDev.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 3, poids: 10, statut: 'VALIDE' },
+  })
+
+  // KPI PERSONNELS Rachid Mansouri Directeur DSI (3 KPI, 100%) — assignés par DG
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat6.id, employeId: usrDirDsi.id, assigneParId: usrDg.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 100, poids: 35, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat17.id, employeId: usrDirDsi.id, assigneParId: usrDg.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 20, poids: 35, statut: 'VALIDE' },
+  })
+  await prisma.kpiEmploye.create({
+    data: { catalogueKpiId: cat15.id, employeId: usrDirDsi.id, assigneParId: usrDg.id, kpiServiceId: null, periodeId: perS1_2025.id, cible: 4, poids: 30, statut: 'VALIDE' },
   })
 
   // ─────────────────────────────────────────

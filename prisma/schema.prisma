@@ -164,6 +164,9 @@ model User {
   notifications        Notification[]
   accounts             Account[]
   sessions             Session[]
+  auditLogs            AuditLog[]
+  saisiePeriodesOuvertesPar   SaisiePeriodeOuverte[] @relation("SaisiePeriodesOuvertesPar")
+  saisiePeriodesOuvertesPour  SaisiePeriodeOuverte[] @relation("SaisiePeriodesOuvertesPour")
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +271,8 @@ model KpiEmploye {
   periode               Periode  @relation(fields: [periodeId], references: [id], onDelete: Cascade)
   saisiesMensuelles     SaisieMensuelle[]
   scorePeriodes         ScorePeriode[]
+  @@index([employeId, periodeId, statut])
+  @@index([kpiServiceId, periodeId])
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +301,22 @@ model SaisieMensuelle {
   employe          User     @relation(fields: [employeId], references: [id], onDelete: Cascade)
   validePar        User?    @relation("SaisieValidePar", fields: [valideParId], references: [id], onDelete: SetNull)
   @@unique([kpiEmployeId, mois, annee])
+  @@index([kpiEmployeId, statut])
+  @@index([employeId, mois, annee, statut])
+}
+
+// Période de saisie rouverte par le N+1 (saisie dépassée)
+model SaisiePeriodeOuverte {
+  id          Int      @id @default(autoincrement())
+  employeId   Int
+  mois        Int
+  annee       Int
+  ouvertParId Int
+  createdAt   DateTime @default(now())
+  employe     User     @relation("SaisiePeriodesOuvertesPour", fields: [employeId], references: [id], onDelete: Cascade)
+  ouvertPar   User     @relation("SaisiePeriodesOuvertesPar", fields: [ouvertParId], references: [id], onDelete: Cascade)
+  @@unique([employeId, mois, annee])
+  @@index([employeId])
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +332,7 @@ model ScorePeriode {
   calcule_le      DateTime
   kpiEmploye       KpiEmploye @relation(fields: [kpiEmployeId], references: [id], onDelete: Cascade)
   periode         Periode   @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+  @@index([kpiEmployeId, periodeId])
 }
 
 model ConsolidationService {
@@ -323,6 +345,7 @@ model ConsolidationService {
   calcule_le                DateTime
   service                   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   periode                   Periode   @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+  @@index([serviceId, periodeId])
 }
 
 model ConsolidationDirection {
@@ -333,6 +356,7 @@ model ConsolidationDirection {
   calcule_le          DateTime
   direction           Direction @relation(fields: [directionId], references: [id], onDelete: Cascade)
   periode             Periode   @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+  @@index([directionId, periodeId])
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +387,25 @@ model Notification {
   lien          String?
   createdAt     DateTime @default(now())
   destinataire  User     @relation(fields: [destinataireId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Audit & Logs (purge après 1 an)
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id          Int       @id @default(autoincrement())
+  createdAt   DateTime  @default(now())
+  userId      Int?
+  action      String
+  entityType  String?
+  entityId    String?
+  details     String?   @db.Text
+  ip          String?
+  userAgent   String?   @db.Text
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([createdAt])
+  @@index([userId])
 }
 
 // ---------------------------------------------------------------------------

@@ -67,9 +67,15 @@ function inPeriod(
   return mois >= moisDebut || mois <= moisFin
 }
 
+export type ConsolidateEmployeOptions = {
+  /** Inclure les saisies SOUMISE, OUVERTE, EN_RETARD pour une vue provisoire (ex: dashboard manager) */
+  includeSoumises?: boolean
+}
+
 export async function consolidateEmploye(
   userId: number,
-  periodeId: number
+  periodeId: number,
+  options?: ConsolidateEmployeOptions
 ): Promise<ConsolidationEmployeResult> {
   const periode = await prisma.periode.findUnique({
     where: { id: periodeId },
@@ -114,14 +120,24 @@ export async function consolidateEmploye(
   let sumPoids = 0
   const now = new Date()
 
+  // Une seule requête pour toutes les saisies des KPI employé (évite N+1)
+  const kpiEmployeIds = kpiEmployes.map((k) => k.id)
+  const allSaisies = await prisma.saisieMensuelle.findMany({
+    where: {
+      kpiEmployeId: { in: kpiEmployeIds },
+      statut: { in: ['VALIDEE', 'AJUSTEE'] },
+    },
+    select: { kpiEmployeId: true, mois: true, annee: true, valeur_realisee: true, valeur_ajustee: true },
+  })
+  const saisiesByKpiEmploye = new Map<number, typeof allSaisies>()
+  for (const s of allSaisies) {
+    const list = saisiesByKpiEmploye.get(s.kpiEmployeId) ?? []
+    list.push(s)
+    saisiesByKpiEmploye.set(s.kpiEmployeId, list)
+  }
+
   for (const ke of kpiEmployes) {
-    const saisies = await prisma.saisieMensuelle.findMany({
-      where: {
-        kpiEmployeId: ke.id,
-        statut: { in: ['VALIDEE', 'AJUSTEE'] },
-      },
-      select: { mois: true, annee: true, valeur_realisee: true, valeur_ajustee: true },
-    })
+    const saisies = saisiesByKpiEmploye.get(ke.id) ?? []
 
     const inPeriodSaisies = saisies.filter((s) =>
       inPeriod(
@@ -150,11 +166,11 @@ export async function consolidateEmploye(
       typeKpi
     )
 
-    const cibleService = ke.kpiService.cible
+    const cibleService = ke.kpiService?.cible ?? ke.cible
     const contributionServicePct =
       cibleService > 0 ? Math.min(150, (valeurAgregee / cibleService) * 100) : 0
-    const poidsDir = ke.kpiService.poids_dans_direction ?? 0
-    const serviceNom = ke.kpiService.service.nom
+    const poidsDir = ke.kpiService?.poids_dans_direction ?? 0
+    const serviceNom = ke.kpiService?.service?.nom ?? '—'
     details.push({
       kpiEmployeId: ke.id,
       nom: ke.catalogueKpi.nom,
@@ -165,8 +181,8 @@ export async function consolidateEmploye(
       poids: ke.poids,
       contributionServicePct: Math.min(100, contributionServicePct * (poidsDir / 100)),
       serviceNom,
-      directionNom: ke.kpiService.kpiDirection?.direction?.nom,
-      contributionDirectionPct: ke.kpiService.kpiDirection
+      directionNom: ke.kpiService?.kpiDirection?.direction?.nom,
+      contributionDirectionPct: ke.kpiService?.kpiDirection
         ? Math.min(100, contributionServicePct * (poidsDir / 100))
         : undefined,
     })
@@ -176,7 +192,7 @@ export async function consolidateEmploye(
       serviceNom,
       contributionPct: Math.min(100, contributionServicePct * (poidsDir / 100)),
     })
-    if (ke.kpiService.kpiDirection?.direction) {
+    if (ke.kpiService?.kpiDirection?.direction) {
       contributionsDirection.push({
         kpiNom: ke.catalogueKpi.nom,
         directionNom: ke.kpiService.kpiDirection.direction.nom,
@@ -195,8 +211,8 @@ export async function consolidateEmploye(
 
   const scoreGlobal = sumPoids > 0 ? sumPondsTaux / sumPoids : 0
 
-  const kpiEmployeIds = kpiEmployes.map((k) => k.id)
-  if (kpiEmployeIds.length > 0) {
+  const skipScorePeriode = options?.includeSoumises
+  if (kpiEmployeIds.length > 0 && !skipScorePeriode) {
     await prisma.scorePeriode.deleteMany({
       where: { kpiEmployeId: { in: kpiEmployeIds }, periodeId },
     })

@@ -140,6 +140,8 @@ export default function AdminPage() {
       router.push('/organisation?tab=utilisateurs')
     } else if (sectionTitle === 'Catalogue KPI') {
       router.push('/catalogue-kpi')
+    } else if (sectionTitle === 'Audit & Logs') {
+      router.push('/dashboard/admin/audit-logs')
     }
   }
 

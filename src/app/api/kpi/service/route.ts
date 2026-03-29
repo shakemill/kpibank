@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSessionAndRequireChefService } from '@/lib/api-auth'
+import { getSessionAndRequireChefService, getSessionAndRequireDirecteur } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import {
   calculerPoidsRestantService,
@@ -8,10 +8,6 @@ import {
 import { kpiServiceCreateSchema } from '@/lib/validations/kpi'
 
 export async function GET(request: NextRequest) {
-  const result = await getSessionAndRequireChefService()
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
-  }
   const { searchParams } = new URL(request.url)
   const periodeIdParam = searchParams.get('periodeId')
   const serviceIdParam = searchParams.get('serviceId')
@@ -22,9 +18,36 @@ export async function GET(request: NextRequest) {
   if (Number.isNaN(periodeId)) {
     return NextResponse.json({ error: 'periodeId invalide' }, { status: 400 })
   }
-  const serviceId = (serviceIdParam ? parseInt(serviceIdParam, 10) : result.serviceId) as number
-  if (Number.isNaN(serviceId) || serviceId !== result.serviceId) {
-    return NextResponse.json({ error: 'Accès refusé à ce service' }, { status: 403 })
+
+  let serviceId: number
+  const chefResult = await getSessionAndRequireChefService()
+  if (!chefResult.error) {
+    serviceId = serviceIdParam ? parseInt(serviceIdParam, 10) : chefResult.serviceId
+    if (Number.isNaN(serviceId) || serviceId !== chefResult.serviceId) {
+      return NextResponse.json({ error: 'Accès refusé à ce service' }, { status: 403 })
+    }
+  } else {
+    const dirResult = await getSessionAndRequireDirecteur()
+    if (dirResult.error) {
+      return NextResponse.json({ error: dirResult.error }, { status: dirResult.status })
+    }
+    if (!serviceIdParam) {
+      return NextResponse.json({ error: 'serviceId requis pour le Directeur' }, { status: 400 })
+    }
+    serviceId = parseInt(serviceIdParam, 10)
+    if (Number.isNaN(serviceId)) {
+      return NextResponse.json({ error: 'serviceId invalide' }, { status: 400 })
+    }
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+      select: { directionId: true },
+    })
+    if (!service) {
+      return NextResponse.json({ error: 'Service introuvable' }, { status: 404 })
+    }
+    if (dirResult.directionId != null && service.directionId !== dirResult.directionId) {
+      return NextResponse.json({ error: 'Accès refusé à ce service' }, { status: 403 })
+    }
   }
   try {
     const service = await prisma.service.findUnique({
@@ -77,10 +100,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const result = await getSessionAndRequireChefService()
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
-  }
   let body: unknown
   try {
     body = await request.json()
@@ -94,10 +113,38 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     )
   }
-  const serviceId = (parsed.data.serviceId ?? result.serviceId) as number
-  if (serviceId !== result.serviceId) {
-    return NextResponse.json({ error: 'Accès refusé à ce service' }, { status: 403 })
+
+  let session: { user?: { id?: string } }
+  let serviceId: number
+  const chefResult = await getSessionAndRequireChefService()
+  if (!chefResult.error) {
+    session = chefResult.session!
+    serviceId = (parsed.data.serviceId ?? chefResult.serviceId) as number
+    if (serviceId !== chefResult.serviceId) {
+      return NextResponse.json({ error: 'Accès refusé à ce service' }, { status: 403 })
+    }
+  } else {
+    const dirResult = await getSessionAndRequireDirecteur()
+    if (dirResult.error) {
+      return NextResponse.json({ error: dirResult.error }, { status: dirResult.status })
+    }
+    session = dirResult.session!
+    if (parsed.data.serviceId == null) {
+      return NextResponse.json({ error: 'serviceId requis' }, { status: 400 })
+    }
+    serviceId = parsed.data.serviceId
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+      select: { directionId: true },
+    })
+    if (!service) {
+      return NextResponse.json({ error: 'Service introuvable' }, { status: 404 })
+    }
+    if (dirResult.directionId != null && service.directionId !== dirResult.directionId) {
+      return NextResponse.json({ error: 'Accès refusé à ce service' }, { status: 403 })
+    }
   }
+
   const poidsRestant = await calculerPoidsRestantService(serviceId, parsed.data.periodeId)
   if (parsed.data.poids > poidsRestant) {
     return NextResponse.json(
@@ -120,7 +167,7 @@ export async function POST(request: NextRequest) {
       )
     }
   }
-  const userId = (result.session!.user as { id?: string }).id
+  const userId = (session.user as { id?: string }).id
   if (!userId) {
     return NextResponse.json({ error: 'Session invalide' }, { status: 401 })
   }
@@ -132,7 +179,7 @@ export async function POST(request: NextRequest) {
     const kpi = await prisma.kpiService.create({
       data: {
         catalogueKpiId: parsed.data.catalogueKpiId,
-        serviceId: result.serviceId,
+        serviceId,
         periodeId: parsed.data.periodeId,
         kpiDirectionId: parsed.data.kpiDirectionId ?? undefined,
         poids_dans_direction: parsed.data.poids_dans_direction ?? undefined,
@@ -156,7 +203,7 @@ export async function POST(request: NextRequest) {
         service: { select: { id: true, nom: true, code: true } },
       },
     })
-    const newRestant = await calculerPoidsRestantService(result.serviceId, parsed.data.periodeId)
+    const newRestant = await calculerPoidsRestantService(serviceId, parsed.data.periodeId)
     return NextResponse.json({ ...kpi, poidsRestant: Math.round(newRestant * 100) / 100 })
   } catch (e) {
     return NextResponse.json(

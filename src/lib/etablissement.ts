@@ -11,8 +11,8 @@ export async function getEtablissementNom(): Promise<string> {
       orderBy: { id: 'asc' },
       select: { nom: true },
     })
-    return etab?.nom ?? 'Banque Nationale'
+    return etab?.nom ?? 'Établissement'
   } catch {
-    return 'Banque Nationale'
+    return 'Établissement'
   }
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSessionAndRequireChefService } from '@/lib/api-auth'
+import { getSessionAndRequireChefService, getSessionAndRequireDirecteur } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { consolidateEmploye } from '@/lib/consolidation'
 
@@ -24,15 +24,39 @@ async function getPeriodeIdOrDefault(periodeIdParam: string | null): Promise<num
 }
 
 export async function GET(request: NextRequest) {
-  const result = await getSessionAndRequireChefService()
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
-  }
-  const serviceId = result.serviceId
   const { searchParams } = new URL(request.url)
   const queryServiceId = searchParams.get('serviceId')
-  if (queryServiceId && parseInt(queryServiceId, 10) !== serviceId) {
-    return NextResponse.json({ error: 'Accès refusé à ce service' }, { status: 403 })
+  let serviceId: number
+
+  const chefResult = await getSessionAndRequireChefService()
+  if (!chefResult.error) {
+    serviceId = chefResult.serviceId
+    if (queryServiceId && parseInt(queryServiceId, 10) !== serviceId) {
+      return NextResponse.json({ error: 'Accès refusé à ce service' }, { status: 403 })
+    }
+  } else {
+    const dirResult = await getSessionAndRequireDirecteur()
+    if (dirResult.error) {
+      return NextResponse.json({ error: chefResult.error }, { status: chefResult.status })
+    }
+    const serviceIdParam = queryServiceId ? parseInt(queryServiceId, 10) : NaN
+    if (Number.isNaN(serviceIdParam)) {
+      return NextResponse.json(
+        { error: 'Pour accéder à l’équipe d’un service, indiquez le service (ex. ?serviceId=15)' },
+        { status: 400 }
+      )
+    }
+    const service = await prisma.service.findUnique({
+      where: { id: serviceIdParam },
+      select: { id: true, directionId: true },
+    })
+    if (!service) {
+      return NextResponse.json({ error: 'Service introuvable' }, { status: 404 })
+    }
+    if (dirResult.directionId != null && service.directionId !== dirResult.directionId) {
+      return NextResponse.json({ error: 'Accès refusé à ce service' }, { status: 403 })
+    }
+    serviceId = service.id
   }
 
   const periodeId = await getPeriodeIdOrDefault(searchParams.get('periodeId'))

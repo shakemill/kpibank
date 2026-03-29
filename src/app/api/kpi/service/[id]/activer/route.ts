@@ -1,21 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSessionAndRequireChefService } from '@/lib/api-auth'
+import { getSessionAndRequireChefService, getSessionAndRequireDirecteur } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import {
   calculerPoidsRestantService,
   validerSommePoidsService,
 } from '@/lib/kpi-utils'
 
-async function checkScope(
-  result: { serviceId: number },
+async function assertCanAccessKpiService(
   kpiServiceId: number
 ): Promise<{ error: string; status: number } | null> {
-  const existing = await prisma.kpiService.findUnique({
+  const kpi = await prisma.kpiService.findUnique({
     where: { id: kpiServiceId },
     select: { serviceId: true },
   })
-  if (!existing) return { error: 'KPI service introuvable', status: 404 }
-  if (existing.serviceId !== result.serviceId) {
+  if (!kpi) return { error: 'KPI service introuvable', status: 404 }
+  const chef = await getSessionAndRequireChefService()
+  if (!chef.error && chef.serviceId === kpi.serviceId) return null
+  const dir = await getSessionAndRequireDirecteur()
+  if (dir.error) return { error: dir.error, status: dir.status }
+  const service = await prisma.service.findUnique({
+    where: { id: kpi.serviceId },
+    select: { directionId: true },
+  })
+  if (!service) return { error: 'Service introuvable', status: 404 }
+  if (dir.directionId != null && service.directionId !== dir.directionId) {
     return { error: 'Accès refusé à ce service', status: 403 }
   }
   return null
@@ -25,16 +33,11 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const result = await getSessionAndRequireChefService()
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
-  }
   const id = parseInt((await params).id, 10)
   if (Number.isNaN(id)) {
     return NextResponse.json({ error: 'ID invalide' }, { status: 400 })
   }
-  const serviceId = result.serviceId!
-  const scopeError = await checkScope({ serviceId }, id)
+  const scopeError = await assertCanAccessKpiService(id)
   if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
   const existing = await prisma.kpiService.findUnique({
     where: { id },

@@ -3,16 +3,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet'
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -28,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Target, User } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -189,119 +190,163 @@ export function KpiDrawer({
     onUpdate()
   }
 
+  const selectedKpiService = kpiServiceOptions.find((s) => String(s.id) === formKpiServiceId)
+
   return (
     <>
-      <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <SheetContent className="sm:max-w-xl flex flex-col overflow-hidden">
-          <SheetHeader>
-            <SheetTitle>KPI de {userName} — {periodeCode}</SheetTitle>
-            <SheetDescription>
-              <Badge variant="outline" className="mt-1">{userRole}</Badge> {serviceNom}
-              {managerNom && ` • Manager : ${managerNom}`}
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <div>
-              <div className="flex items-center justify-between text-sm mb-1">
-                <span>Poids total</span>
-                <span className={poidsOk ? 'text-green-600' : 'text-orange-600'}>
-                  {sumPoids.toFixed(1)}% {poidsOk ? '✅' : `⚠️ (manque ${poidsRestant.toFixed(0)}%)`}
-                </span>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-muted/30 shrink-0">
+            <div className="flex items-start gap-3">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <User className="h-6 w-6 text-primary" />
               </div>
-              <Progress value={Math.min(100, sumPoids)} className="h-2" />
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-xl">{userName}</DialogTitle>
+                <DialogDescription className="mt-1 flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="font-normal">{userRole}</Badge>
+                  <span className="text-muted-foreground">{serviceNom}</span>
+                  {managerNom && (
+                    <span className="text-muted-foreground">• Manager : {managerNom}</span>
+                  )}
+                </DialogDescription>
+                <p className="text-sm font-medium text-primary mt-2">{periodeCode}</p>
+              </div>
             </div>
+          </DialogHeader>
 
-            <div>
-              <h4 className="font-medium text-sm mb-2">KPI assignés ({kpiList.length})</h4>
-              {loading ? (
-                <p className="text-muted-foreground text-sm">Chargement...</p>
-              ) : kpiList.length === 0 ? (
-                <p className="text-muted-foreground text-sm">Aucun KPI assigné.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>KPI</TableHead>
-                      <TableHead className="text-right">Poids</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead className="w-[80px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {kpiList.map((k) => (
-                      <TableRow key={k.id}>
-                        <TableCell className="font-medium">{k.catalogueKpi.nom}</TableCell>
-                        <TableCell className="text-right">{k.poids}%</TableCell>
-                        <TableCell>{STATUT_MAP[k.statut] ?? k.statut}</TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => setDeleteTarget(k)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5 min-h-0">
+            <Card className="border-border/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center justify-between">
+                  <span>Répartition des poids</span>
+                  <span className={poidsOk ? 'text-green-600 font-semibold' : 'text-amber-600 font-semibold'}>
+                    {sumPoids.toFixed(1)}% {poidsOk ? '— OK' : `— manque ${poidsRestant.toFixed(0)}%`}
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Progress value={Math.min(100, sumPoids)} className="h-2.5" />
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">KPI assignés ({kpiList.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {loading ? (
+                  <p className="text-muted-foreground text-sm py-4">Chargement...</p>
+                ) : kpiList.length === 0 ? (
+                  <p className="text-muted-foreground text-sm py-4">Aucun KPI assigné.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>KPI</TableHead>
+                        <TableHead className="text-right">Poids</TableHead>
+                        <TableHead>Statut</TableHead>
+                        <TableHead className="w-[56px]"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
+                    </TableHeader>
+                    <TableBody>
+                      {kpiList.map((k) => (
+                        <TableRow key={k.id}>
+                          <TableCell className="font-medium">{k.catalogueKpi.nom}</TableCell>
+                          <TableCell className="text-right">{k.poids}%</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-normal text-xs">
+                              {STATUT_MAP[k.statut] ?? k.statut}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => setDeleteTarget(k)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
 
-            <div className="border-t pt-4 space-y-3">
-              <h4 className="font-medium text-sm">Assigner un nouveau KPI</h4>
-              <p className="text-muted-foreground text-xs">Depuis les KPI du service</p>
-              <Select value={formKpiServiceId} onValueChange={setFormKpiServiceId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner un KPI service" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableKpiServices.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {s.catalogueKpi.nom}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="grid grid-cols-2 gap-2">
+            <Card className="border-border/50 border-dashed">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Target className="h-4 w-4 text-muted-foreground" />
+                  Assigner un nouveau KPI
+                </CardTitle>
+                <p className="text-muted-foreground text-xs font-normal">Depuis les KPI du service</p>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-4">
                 <div>
-                  <label className="text-xs text-muted-foreground">Cible</label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={formCible}
-                    onChange={(e) => setFormCible(e.target.value)}
-                    placeholder="Cible"
-                  />
+                  <label className="text-sm font-medium mb-1.5 block">KPI du service</label>
+                  <Select value={formKpiServiceId} onValueChange={(v) => { setFormKpiServiceId(v); setFormCible(''); setFormPoids(''); }}>
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder="Sélectionner un KPI" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableKpiServices.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {s.catalogueKpi.nom} ({s.catalogueKpi.type}{s.catalogueKpi.unite ? `, ${s.catalogueKpi.unite}` : ''})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">Poids % (restant : {poidsRestant.toFixed(0)}%)</label>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    min={0}
-                    max={100}
-                    value={formPoids}
-                    onChange={(e) => setFormPoids(e.target.value)}
-                    placeholder="Poids"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">
+                      Cible
+                      {selectedKpiService?.catalogueKpi.unite && (
+                        <span className="text-muted-foreground font-normal ml-1">({selectedKpiService.catalogueKpi.unite})</span>
+                      )}
+                    </label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={formCible}
+                      onChange={(e) => setFormCible(e.target.value)}
+                      placeholder={selectedKpiService ? String(selectedKpiService.cible) : '—'}
+                      className="h-10"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">
+                      Poids (%) — restant : {poidsRestant.toFixed(0)}%
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      min={0}
+                      max={100}
+                      value={formPoids}
+                      onChange={(e) => setFormPoids(e.target.value)}
+                      placeholder="0"
+                      className="h-10"
+                    />
+                  </div>
                 </div>
-              </div>
-              <Button
-                onClick={handleAssign}
-                disabled={submitting || !formKpiServiceId || !formCible || !formPoids}
-                className="w-full gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Assigner ce KPI
-              </Button>
-            </div>
+                <Button
+                  onClick={handleAssign}
+                  disabled={submitting || !formKpiServiceId || !formCible || !formPoids}
+                  className="w-full gap-2 h-10"
+                >
+                  <Plus className="h-4 w-4" />
+                  Assigner ce KPI
+                </Button>
+              </CardContent>
+            </Card>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from '@/hooks/use-toast'
 import {
@@ -27,7 +27,17 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Users, Calendar, Settings, Link2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
+import { Users, Settings, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type Periode = { id: number; code: string; type: string; statut: string }
 
@@ -56,6 +66,20 @@ type Grouped = {
   employes: CollaborateurRow[]
 }
 
+type CollaborateurRowWithSection = CollaborateurRow & { sectionLabel: string }
+
+const SECTION_LABELS: Record<keyof Omit<Grouped, 'rattachesDirects'> | 'rattachesDirects', string> = {
+  rattachesDirects: 'Rattachés directs',
+  directeurs: 'Directeurs',
+  chefsService: 'Chefs de service',
+  managers: 'Managers',
+  employes: 'Employés',
+}
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const
+
+type SortKey = 'sectionLabel' | 'nom' | 'role' | 'nbKpiAssignes' | 'sommePoids' | 'statutGlobal'
+
 const ROLE_BADGE: Record<string, { label: string; className: string }> = {
   EMPLOYE: { label: 'Employé', className: 'bg-muted text-muted-foreground' },
   MANAGER: { label: 'Manager', className: 'bg-blue-500/10 text-blue-700 dark:text-blue-400' },
@@ -81,67 +105,141 @@ function PoidsIndicator({ row }: { row: CollaborateurRow }) {
   return <span className="text-orange-600">{row.sommePoids.toFixed(1)}% ⚠️</span>
 }
 
-function SectionTable({
-  title,
-  icon,
+function flattenGrouped(grouped: Grouped): CollaborateurRowWithSection[] {
+  const out: CollaborateurRowWithSection[] = []
+  const keys: (keyof Grouped)[] = ['rattachesDirects', 'directeurs', 'chefsService', 'managers', 'employes']
+  for (const key of keys) {
+    const label = SECTION_LABELS[key]
+    for (const row of grouped[key]) {
+      out.push({ ...row, sectionLabel: label })
+    }
+  }
+  return out
+}
+
+function SortableHead({
+  label,
+  sortKey,
+  currentSort,
+  sortDir,
+  onSort,
+  className,
+}: {
+  label: string
+  sortKey: SortKey
+  currentSort: SortKey | null
+  sortDir: 'asc' | 'desc'
+  onSort: (key: SortKey) => void
+  className?: string
+}) {
+  const active = currentSort === sortKey
+  return (
+    <TableHead
+      className={cn('cursor-pointer select-none hover:bg-muted/50 transition-colors', className)}
+      onClick={() => onSort(sortKey)}
+    >
+      <div className={cn('flex items-center gap-1', className?.includes('text-right') && 'justify-end')}>
+        {label}
+        {active ? (
+          sortDir === 'asc' ? (
+            <ArrowUp className="h-3.5 w-3.5 text-primary" />
+          ) : (
+            <ArrowDown className="h-3.5 w-3.5 text-primary" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground opacity-60" />
+        )}
+      </div>
+    </TableHead>
+  )
+}
+
+function AssignationTable({
   rows,
   router,
+  sortBy,
+  sortDir,
+  onSort,
 }: {
-  title: string
-  icon: React.ReactNode
-  rows: CollaborateurRow[]
+  rows: CollaborateurRowWithSection[]
   router: ReturnType<typeof useRouter>
+  sortBy: SortKey | null
+  sortDir: 'asc' | 'desc'
+  onSort: (key: SortKey) => void
 }) {
   if (rows.length === 0) return null
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground border-b pb-1">
-        {icon}
-        <span>{title} ({rows.length})</span>
-      </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Nom</TableHead>
-            <TableHead>Rôle</TableHead>
-            <TableHead className="text-right">Nb KPI</TableHead>
-            <TableHead className="text-right">Poids</TableHead>
-            <TableHead>Statut global</TableHead>
-            <TableHead className="w-[140px]">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => {
-            const roleBadge = ROLE_BADGE[row.role] ?? { label: row.role, className: 'bg-muted text-muted-foreground' }
-            return (
-              <TableRow key={row.id}>
-                <TableCell className="font-medium">{row.prenom} {row.nom}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className={roleBadge.className}>
-                    {roleBadge.label}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">{row.nbKpiAssignes}</TableCell>
-                <TableCell className="text-right">
-                  <PoidsIndicator row={row} />
-                </TableCell>
-                <TableCell>{STATUT_GLOBAL_LABEL[row.statutGlobal] ?? row.statutGlobal}</TableCell>
-                <TableCell>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/manager/assignation/${row.id}`)}
-                  >
-                    <Settings className="h-3.5 w-3.5 mr-1" />
-                    Gérer ses KPI
-                  </Button>
-                </TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
-    </div>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <SortableHead label="Groupe" sortKey="sectionLabel" currentSort={sortBy} sortDir={sortDir} onSort={onSort} />
+          <SortableHead label="Nom" sortKey="nom" currentSort={sortBy} sortDir={sortDir} onSort={onSort} />
+          <SortableHead label="Rôle" sortKey="role" currentSort={sortBy} sortDir={sortDir} onSort={onSort} />
+          <SortableHead
+            label="Nb KPI"
+            sortKey="nbKpiAssignes"
+            currentSort={sortBy}
+            sortDir={sortDir}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableHead
+            label="Poids"
+            sortKey="sommePoids"
+            currentSort={sortBy}
+            sortDir={sortDir}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableHead
+            label="Statut global"
+            sortKey="statutGlobal"
+            currentSort={sortBy}
+            sortDir={sortDir}
+            onSort={onSort}
+          />
+          <TableHead className="w-[140px]">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => {
+          const roleBadge = ROLE_BADGE[row.role] ?? { label: row.role, className: 'bg-muted text-muted-foreground' }
+          return (
+            <TableRow key={`${row.sectionLabel}-${row.id}`}>
+              <TableCell className="text-muted-foreground text-sm">{row.sectionLabel}</TableCell>
+              <TableCell>
+                <div className="font-medium">{row.prenom} {row.nom}</div>
+                {(row.service ?? row.direction) && (
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {[row.direction?.nom, row.service?.nom].filter(Boolean).join(' · ')}
+                  </div>
+                )}
+              </TableCell>
+              <TableCell>
+                <Badge variant="secondary" className={roleBadge.className}>
+                  {roleBadge.label}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">{row.nbKpiAssignes}</TableCell>
+              <TableCell className="text-right">
+                <PoidsIndicator row={row} />
+              </TableCell>
+              <TableCell>{STATUT_GLOBAL_LABEL[row.statutGlobal] ?? row.statutGlobal}</TableCell>
+              <TableCell>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/manager/assignation/${row.id}`)}
+                >
+                  <Settings className="h-3.5 w-3.5 mr-1" />
+                  Gérer ses KPI
+                </Button>
+              </TableCell>
+            </TableRow>
+          )
+        })}
+      </TableBody>
+    </Table>
   )
 }
 
@@ -152,6 +250,24 @@ export default function AssignationPage() {
   const [grouped, setGrouped] = useState<Grouped | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [statutFilter, setStatutFilter] = useState<string>('all')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const [sortBy, setSortBy] = useState<SortKey | null>('nom')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = useCallback((key: SortKey) => {
+    setSortBy((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+        return key
+      }
+      setSortDir('asc')
+      return key
+    })
+  }, [])
 
   const fetchPeriodes = useCallback(async () => {
     const res = await fetch('/api/periodes')
@@ -196,15 +312,56 @@ export default function AssignationPage() {
     else setGrouped(null)
   }, [periodeId, fetchAssignation])
 
+  useEffect(() => {
+    setPage(1)
+  }, [search, roleFilter, statutFilter, pageSize])
+
   const selectedPeriode = periodes.find((p) => p.id === periodeId)
-  const totalCollaborateurs =
-    grouped
-      ? grouped.rattachesDirects.length +
-        grouped.directeurs.length +
-        grouped.chefsService.length +
-        grouped.managers.length +
-        grouped.employes.length
-      : 0
+  const allRows: CollaborateurRowWithSection[] = grouped ? flattenGrouped(grouped) : []
+  const searchLower = search.trim().toLowerCase()
+  const filteredRows = allRows.filter((r) => {
+    if (searchLower && ![r.nom, r.prenom, r.email].some((s) => String(s ?? '').toLowerCase().includes(searchLower)))
+      return false
+    if (roleFilter !== 'all' && r.role !== roleFilter) return false
+    if (statutFilter !== 'all' && r.statutGlobal !== statutFilter) return false
+    return true
+  })
+  const sortedRows = useMemo(() => {
+    if (!sortBy) return filteredRows
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...filteredRows].sort((a, b) => {
+      let cmp = 0
+      switch (sortBy) {
+        case 'sectionLabel':
+          cmp = (a.sectionLabel ?? '').localeCompare(b.sectionLabel ?? '')
+          break
+        case 'nom':
+          cmp = `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`)
+          break
+        case 'role':
+          cmp = (a.role ?? '').localeCompare(b.role ?? '')
+          break
+        case 'nbKpiAssignes':
+          cmp = a.nbKpiAssignes - b.nbKpiAssignes
+          break
+        case 'sommePoids':
+          cmp = a.sommePoids - b.sommePoids
+          break
+        case 'statutGlobal':
+          cmp = (a.statutGlobal ?? '').localeCompare(b.statutGlobal ?? '')
+          break
+        default:
+          return 0
+      }
+      return cmp * dir
+    })
+  }, [filteredRows, sortBy, sortDir])
+
+  const totalFiltered = sortedRows.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize))
+  const currentPage = Math.min(Math.max(1, page), totalPages)
+  const paginatedRows = sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const totalCollaborateurs = allRows.length
 
   return (
     <div className="space-y-6 p-6">
@@ -252,7 +409,8 @@ export default function AssignationPage() {
             <div>
               <CardTitle className="text-base">Collaborateurs assignables</CardTitle>
               <CardDescription>
-                {totalCollaborateurs} personne{totalCollaborateurs !== 1 ? 's' : ''} dans votre périmètre — groupées par rôle
+                {totalCollaborateurs} personne{totalCollaborateurs !== 1 ? 's' : ''} dans votre périmètre
+                {totalFiltered !== totalCollaborateurs ? ` — ${totalFiltered} après filtres` : ''}
               </CardDescription>
             </div>
           </div>
@@ -266,38 +424,140 @@ export default function AssignationPage() {
             <p className="text-muted-foreground">Chargement des assignations...</p>
           ) : grouped ? (
             <>
-              <SectionTable
-                title="Rattachés directs à la direction"
-                icon={<Link2 className="h-4 w-4" />}
-                rows={grouped.rattachesDirects}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[200px] max-w-sm">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Rechercher (nom, prénom, email)..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Rôle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les rôles</SelectItem>
+                    {Object.entries(ROLE_BADGE).map(([value, { label }]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={statutFilter} onValueChange={setStatutFilter}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Statut" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les statuts</SelectItem>
+                    {Object.entries(STATUT_GLOBAL_LABEL).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Par page</span>
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(v) => setPageSize(Number(v) as 10 | 25 | 50)}
+                  >
+                    <SelectTrigger className="w-[70px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAGE_SIZE_OPTIONS.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <AssignationTable
+                rows={paginatedRows}
                 router={router}
+                sortBy={sortBy}
+                sortDir={sortDir}
+                onSort={handleSort}
               />
-              <SectionTable
-                title="Directeurs"
-                icon={<span className="text-orange-500">◆</span>}
-                rows={grouped.directeurs}
-                router={router}
-              />
-              <SectionTable
-                title="Chefs de service"
-                icon={<span className="text-violet-500">◆</span>}
-                rows={grouped.chefsService}
-                router={router}
-              />
-              <SectionTable
-                title="Managers"
-                icon={<span className="text-blue-500">◆</span>}
-                rows={grouped.managers}
-                router={router}
-              />
-              <SectionTable
-                title="Employés"
-                icon={<span className="text-muted-foreground">◆</span>}
-                rows={grouped.employes}
-                router={router}
-              />
-              {totalCollaborateurs === 0 && (
-                <p className="text-muted-foreground py-4">Aucun collaborateur dans votre périmètre.</p>
+
+              {totalFiltered === 0 && (
+                <p className="text-muted-foreground py-4">
+                  {totalCollaborateurs === 0
+                    ? 'Aucun collaborateur dans votre périmètre.'
+                    : 'Aucun résultat pour ces filtres.'}
+                </p>
+              )}
+
+              {totalFiltered > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                  <p className="text-sm text-muted-foreground">
+                    Page {currentPage} sur {totalPages}
+                    {' — '}
+                    {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalFiltered)} sur {totalFiltered}
+                  </p>
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            if (currentPage > 1) setPage((p) => p - 1)
+                          }}
+                          className={currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}
+                          aria-disabled={currentPage <= 1}
+                        />
+                      </PaginationItem>
+                      {(() => {
+                        const show = Array.from(
+                          new Set([
+                            1,
+                            totalPages,
+                            currentPage,
+                            currentPage - 1,
+                            currentPage + 1,
+                          ].filter((p) => p >= 1 && p <= totalPages))
+                        ).sort((a, b) => a - b)
+                        return show.map((p, idx, arr) => (
+                          <PaginationItem key={p}>
+                            {idx > 0 && arr[idx - 1] !== p - 1 && (
+                              <span className="px-2 text-muted-foreground">…</span>
+                            )}
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                setPage(p)
+                              }}
+                              isActive={p === currentPage}
+                            >
+                              {p}
+                            </PaginationLink>
+                          </PaginationItem>
+                        ))
+                      })()}
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            if (currentPage < totalPages) setPage((p) => p + 1)
+                          }}
+                          className={currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}
+                          aria-disabled={currentPage >= totalPages}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
               )}
             </>
           ) : (

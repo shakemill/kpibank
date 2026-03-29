@@ -58,9 +58,11 @@ interface MesKpiPersoSectionProps {
   /** Ex. "le DG" ou "votre Chef de service". Utilisé si aucun KPI n'a d'assigneur. */
   assigneParLabel?: string
   lienSaisie?: string
+  /** Si true, affiche une carte explicative quand aucun KPI n'est assigné (ex. pour le chef de service). */
+  showWhenEmpty?: boolean
 }
 
-export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie = '/saisie' }: MesKpiPersoSectionProps) {
+export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie = '/saisie', showWhenEmpty = false }: MesKpiPersoSectionProps) {
   const [list, setList] = useState<KpiPersoItem[]>([])
   const [loading, setLoading] = useState(true)
   const now = new Date()
@@ -115,6 +117,29 @@ export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie =
   }
 
   if (list.length === 0) {
+    if (showWhenEmpty) {
+      return (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Mes objectifs personnels
+            </CardTitle>
+            <CardDescription>
+              Aucun KPI personnel assigné pour le moment. Vos objectifs assignés par votre directeur apparaîtront ici.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href={lienSaisie}>
+              <Button variant="outline" size="sm">
+                <ClipboardList className="h-4 w-4 mr-1" />
+                Saisie mensuelle
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )
+    }
     return null
   }
 

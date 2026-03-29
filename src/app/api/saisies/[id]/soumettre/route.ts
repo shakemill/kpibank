@@ -51,7 +51,18 @@ export async function POST(
     Number.isNaN(delaiJour) ? 10 : delaiJour
   )
   if (statutPeriode === 'VERROUILLEE') {
-    return apiError('La période de saisie est clôturée', 403)
+    const periodeOuverteParN1 = await prisma.saisiePeriodeOuverte.findUnique({
+      where: {
+        employeId_mois_annee: {
+          employeId: saisie.employeId,
+          mois: saisie.mois,
+          annee: saisie.annee,
+        },
+      },
+    })
+    if (!periodeOuverteParN1) {
+      return apiError('La période de saisie est clôturée', 403)
+    }
   }
 
   const valeur = saisie.valeur_ajustee ?? saisie.valeur_realisee

@@ -127,6 +127,44 @@ export function templateKpiConteste(
   `
 }
 
+export function templateNouveauCompte(
+  nomEtablissement: string,
+  prenom: string,
+  email: string,
+  motDePasseTemporaire: string
+) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: #1F4E79; padding: 20px; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 18px;">
+          Système KPI — ${nomEtablissement}
+        </h1>
+      </div>
+      <div style="padding: 30px; background: #f9f9f9;">
+        <h2 style="color: #1F4E79;">Votre compte a été créé</h2>
+        <p>Bonjour <strong>${prenom}</strong>,</p>
+        <p>Un compte utilisateur a été créé pour vous dans le Système KPI de <strong>${nomEtablissement}</strong>.</p>
+        <p>Voici vos identifiants de connexion :</p>
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 0 0 10px 0;"><strong>Email :</strong> ${email}</p>
+          <p style="margin: 0;"><strong>Mot de passe temporaire :</strong> <code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 14px;">${motDePasseTemporaire}</code></p>
+        </div>
+        <p><strong>Important :</strong> Vous serez invité à modifier ce mot de passe lors de votre première connexion.</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${baseUrl}/login"
+             style="background: #2E75B6; color: white; padding: 12px 24px; 
+                    text-decoration: none; border-radius: 4px; font-weight: bold;">
+            Se connecter
+          </a>
+        </div>
+        <p style="color: #888; font-size: 12px;">
+          Cet email est envoyé automatiquement par le Système KPI. Conservez ces identifiants en lieu sûr.
+        </p>
+      </div>
+    </div>
+  `
+}
+
 export function templateSaisieEnRetard(nomEtablissement: string, prenom: string, mois: string, managerNom: string) {
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

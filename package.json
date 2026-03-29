@@ -4,10 +4,22 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:webpack": "next dev --no-turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "seed:2026": "tsx prisma/seed-2026.ts"
+    "seed:2026": "tsx prisma/seed-2026.ts",
+    "seed:dsi": "tsx prisma/seed-dsi.ts",
+    "seed:bgfi": "tsx prisma/seed-bgfi-dsi-commercial.ts",
+    "add-periodes-2026": "tsx prisma/scripts/add-periodes-2026.ts",
+    "dupliquer-kpi-2026": "tsx prisma/scripts/dupliquer-kpi-2026.ts",
+    "add-kpi-dsi-s1-2026": "tsx prisma/scripts/add-kpi-dsi-s1-2026.ts",
+    "supprimer-utilisateurs-sauf-dg": "tsx prisma/scripts/supprimer-utilisateurs-sauf-dg.ts",
+    "supprimer-services-et-directions": "tsx prisma/scripts/supprimer-services-et-directions.ts",
+    "supprimer-kpi-et-periodes": "tsx prisma/scripts/supprimer-kpi-et-periodes.ts",
+    "seed-catalogue-kpi": "tsx prisma/scripts/seed-catalogue-kpi.ts",
+    "seed-catalogue-descriptions": "tsx prisma/scripts/seed-catalogue-descriptions.ts",
+    "saisies-dates-fevrier": "tsx prisma/scripts/saisies-dates-fevrier.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

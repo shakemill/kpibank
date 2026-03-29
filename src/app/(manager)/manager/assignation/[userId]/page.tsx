@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from '@/hooks/use-toast'
 import {
@@ -36,6 +37,19 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
   Table,
   TableBody,
   TableCell,
@@ -44,7 +58,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Target, Plus, Edit, Trash2, Send } from 'lucide-react'
+import { ArrowLeft, Target, Plus, Edit, Trash2, Send, ChevronDown, AlertCircle } from 'lucide-react'
 
 type Periode = { id: number; code: string; statut: string }
 type KpiServiceOption = {
@@ -106,6 +120,7 @@ export default function AssignationEmployePage() {
   const [formPoids, setFormPoids] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<KpiEmployeRow | null>(null)
   const [notifying, setNotifying] = useState(false)
+  const [catalogueComboboxOpen, setCatalogueComboboxOpen] = useState(false)
 
   const fetchEmploye = useCallback(async () => {
     const res = await fetch('/api/users/equipe')
@@ -239,6 +254,7 @@ export default function AssignationEmployePage() {
     setFormKpiRefId('')
     setFormCible('')
     setFormPoids('')
+    setCatalogueComboboxOpen(false)
     setModalOpen(true)
   }
 
@@ -480,6 +496,14 @@ export default function AssignationEmployePage() {
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     )}
+                    {k.statut === 'CONTESTE' && (
+                      <Button variant="outline" size="sm" className="gap-1" asChild>
+                        <Link href="/manager/assignation/contestations">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          Traiter
+                        </Link>
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -521,18 +545,41 @@ export default function AssignationEmployePage() {
                 {!formKpiServiceId && (
                   <div>
                     <label className="text-sm font-medium mb-2 block">KPI (catalogue)</label>
-                    <Select value={formCatalogueKpiId} onValueChange={setFormCatalogueKpiId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choisir un KPI du catalogue" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableCatalogue.map((c) => (
-                          <SelectItem key={c.id} value={String(c.id)}>
-                            {c.nom} ({c.type})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={catalogueComboboxOpen} onOpenChange={setCatalogueComboboxOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={catalogueComboboxOpen}
+                          className="w-full justify-between font-normal h-9"
+                        >
+                          {selectedCatalogue ? `${selectedCatalogue.nom} (${selectedCatalogue.type}${selectedCatalogue.unite ? `, ${selectedCatalogue.unite}` : ''})` : 'Choisir un KPI du catalogue'}
+                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Rechercher un KPI..." />
+                          <CommandList>
+                            <CommandEmpty>Aucun KPI trouvé.</CommandEmpty>
+                            <CommandGroup>
+                              {availableCatalogue.map((c) => (
+                                <CommandItem
+                                  key={c.id}
+                                  value={`${c.nom} ${c.type} ${c.unite ?? ''}`}
+                                  onSelect={() => {
+                                    setFormCatalogueKpiId(String(c.id))
+                                    setCatalogueComboboxOpen(false)
+                                  }}
+                                >
+                                  {c.nom} ({c.type}{c.unite ? `, ${c.unite}` : ''})
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                 )}
               </>
@@ -540,18 +587,41 @@ export default function AssignationEmployePage() {
               <>
                 <div>
                   <label className="text-sm font-medium mb-2 block">KPI (catalogue stratégique)</label>
-                  <Select value={formCatalogueKpiId} onValueChange={setFormCatalogueKpiId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choisir un KPI du catalogue" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableCatalogue.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.nom} ({c.type})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={catalogueComboboxOpen} onOpenChange={setCatalogueComboboxOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={catalogueComboboxOpen}
+                        className="w-full justify-between font-normal h-9"
+                      >
+                        {selectedCatalogue ? `${selectedCatalogue.nom} (${selectedCatalogue.type}${selectedCatalogue.unite ? `, ${selectedCatalogue.unite}` : ''})` : 'Choisir un KPI du catalogue'}
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Rechercher un KPI..." />
+                        <CommandList>
+                          <CommandEmpty>Aucun KPI trouvé.</CommandEmpty>
+                          <CommandGroup>
+                            {availableCatalogue.map((c) => (
+                              <CommandItem
+                                key={c.id}
+                                value={`${c.nom} ${c.type} ${c.unite ?? ''}`}
+                                onSelect={() => {
+                                  setFormCatalogueKpiId(String(c.id))
+                                  setCatalogueComboboxOpen(false)
+                                }}
+                              >
+                                {c.nom} ({c.type}{c.unite ? `, ${c.unite}` : ''})
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 {kpiServiceOptions.length > 0 && (
                   <div>
@@ -592,7 +662,14 @@ export default function AssignationEmployePage() {
               </div>
             )}
             <div>
-              <label className="text-sm font-medium mb-2 block">Cible individuelle</label>
+              <label className="text-sm font-medium mb-2 block">
+                Cible individuelle
+                {(selectedKpiService?.catalogueKpi.unite ?? selectedCatalogue?.unite) && (
+                  <span className="text-muted-foreground font-normal ml-1">
+                    ({selectedKpiService?.catalogueKpi.unite ?? selectedCatalogue?.unite})
+                  </span>
+                )}
+              </label>
               <Input
                 type="number"
                 step="any"

@@ -17,6 +17,8 @@ async function getKpiAndScope(kpiEmployeId: number) {
       periodeId: true,
       poids: true,
       statut: true,
+      periode: { select: { statut: true } },
+      _count: { select: { saisiesMensuelles: true } },
     },
   })
   return kpi
@@ -114,6 +116,25 @@ export async function DELETE(
   const managerId = parseInt((result.session!.user as { id?: string }).id!, 10)
   if (existing.assigneParId !== managerId) {
     return NextResponse.json({ error: 'Accès refusé' }, { status: 403 })
+  }
+  const periodeStatut = existing.periode?.statut
+  if (periodeStatut === 'EN_COURS' || periodeStatut === 'CLOTUREE') {
+    return NextResponse.json(
+      { error: 'Impossible de supprimer un KPI dont la période est en cours ou clôturée.' },
+      { status: 400 }
+    )
+  }
+  if (existing.statut !== 'DRAFT') {
+    return NextResponse.json(
+      { error: 'Impossible de supprimer un KPI déjà notifié ou renseigné.' },
+      { status: 400 }
+    )
+  }
+  if (existing._count?.saisiesMensuelles != null && existing._count.saisiesMensuelles > 0) {
+    return NextResponse.json(
+      { error: 'Impossible de supprimer un KPI qui possède déjà des saisies.' },
+      { status: 400 }
+    )
   }
   try {
     await prisma.kpiEmploye.delete({ where: { id } })

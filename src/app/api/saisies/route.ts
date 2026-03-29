@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
     const periodes = await prisma.periode.findMany({
       where: {
         actif: true,
+        statut: 'EN_COURS',
         mois_debut: { lte: mois },
         mois_fin: { gte: mois },
         annee,
@@ -68,7 +69,23 @@ export async function GET(request: NextRequest) {
       take: 1,
     })
     const periode = periodes[0] ?? null
+
+    const dernierePeriode = await prisma.periode.findFirst({
+      where: { actif: true },
+      orderBy: [{ annee: 'desc' }, { mois_fin: 'desc' }],
+      select: { code: true },
+    })
     const periodeId = periode?.id ?? null
+
+    const periodesOuvertesParN1 =
+      targetEmployeId === userIdNum
+        ? (
+            await prisma.saisiePeriodeOuverte.findMany({
+              where: { employeId: targetEmployeId },
+              select: { mois: true, annee: true },
+            })
+          ).map((p) => ({ mois: p.mois, annee: p.annee }))
+        : []
 
     const kpiEmployesRaw =
       periodeId == null
@@ -156,7 +173,7 @@ export async function GET(request: NextRequest) {
           valeur_realisee: s.valeur_ajustee ?? s.valeur_realisee,
           statut: s.statut,
         })) as SaisieMensuelleForCumul[]
-      const realiseCumule = calculerRealiseCumule(saisiesKpi, modeAgregation, mois)
+      const realiseCumule = calculerRealiseCumule(saisiesKpi, modeAgregation, mois, true)
       const tauxAvancementPeriode =
         cibleAttendueADate > 0
           ? Math.round((realiseCumule / cibleAttendueADate) * 1000) / 10
@@ -215,8 +232,10 @@ export async function GET(request: NextRequest) {
       kpiEmployes,
       saisies: saisiesMoisCourant,
       statutPeriode,
+      periodesOuvertesParN1,
       delaiJour: Number.isNaN(delaiJour) ? 10 : delaiJour,
       periode: periode ? { code: periode.code, mois_debut: periode.mois_debut, mois_fin: periode.mois_fin, annee: periode.annee } : null,
+      dernierePeriode: dernierePeriode?.code ?? null,
     })
   } catch (e) {
     return apiError('Erreur serveur', 500, e instanceof Error ? e.message : e)
@@ -254,7 +273,18 @@ export async function POST(request: NextRequest) {
     Number.isNaN(delaiJour) ? 10 : delaiJour
   )
   if (statutPeriode === 'VERROUILLEE') {
-    return apiError('La période de saisie est clôturée', 403)
+    const periodeOuverteParN1 = await prisma.saisiePeriodeOuverte.findUnique({
+      where: {
+        employeId_mois_annee: {
+          employeId,
+          mois: parsed.data.mois,
+          annee: parsed.data.annee,
+        },
+      },
+    })
+    if (!periodeOuverteParN1) {
+      return apiError('La période de saisie est clôturée', 403)
+    }
   }
 
   const kpiEmploye = await prisma.kpiEmploye.findUnique({

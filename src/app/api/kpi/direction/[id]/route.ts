@@ -108,6 +108,43 @@ export async function DELETE(
   }
   const scopeError = await checkScope(result, id)
   if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
+  const existing = await prisma.kpiDirection.findUnique({
+    where: { id },
+    select: {
+      periode: { select: { statut: true } },
+      kpiServices: {
+        select: {
+          kpiEmployes: {
+            select: {
+              statut: true,
+              _count: { select: { saisiesMensuelles: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!existing) {
+    return NextResponse.json({ error: 'KPI direction introuvable' }, { status: 404 })
+  }
+  const periodeStatut = existing.periode?.statut
+  if (periodeStatut === 'EN_COURS' || periodeStatut === 'CLOTUREE') {
+    return NextResponse.json(
+      { error: 'Impossible de supprimer un KPI dont la période est en cours ou clôturée.' },
+      { status: 400 }
+    )
+  }
+  const hasRenseigne = existing.kpiServices.some((ks) =>
+    ks.kpiEmployes.some(
+      (ke) => ke.statut !== 'DRAFT' || (ke._count?.saisiesMensuelles ?? 0) > 0
+    )
+  )
+  if (hasRenseigne) {
+    return NextResponse.json(
+      { error: 'Impossible de supprimer un KPI direction déjà renseigné ou lié à des KPI renseignés.' },
+      { status: 400 }
+    )
+  }
   try {
     await prisma.kpiDirection.delete({ where: { id } })
     return NextResponse.json({ success: true })

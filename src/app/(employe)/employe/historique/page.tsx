@@ -24,27 +24,39 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { History, TrendingUp } from 'lucide-react'
+import { TrendingUp, BarChart3 } from 'lucide-react'
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
+  ReferenceLine,
+  Cell,
 } from 'recharts'
 
 type PeriodeOption = { id: number; code: string }
 type DetailRow = { nom: string; type: string; cible: number; realise: number; taux: number; statut: string }
 type EvolutionPoint = { periodeId: number; code: string; scoreGlobal: number }
+type ScoreMois = { mois: number; annee: number; label: string; scorePct: number }
 type ApiResponse = {
   periodeId: number
   periodeCode: string
   detailPeriode: { scoreGlobal: number; details: DetailRow[] }
   comparaisonVsPrecedent: number | null
   evolution: EvolutionPoint[]
+  scoreParMois: ScoreMois[]
   periodes: PeriodeOption[]
+}
+
+function barColor(score: number): string {
+  if (score >= 90) return 'hsl(142 76% 36%)'
+  if (score >= 70) return 'hsl(25 95% 53%)'
+  return 'hsl(0 84% 60%)'
 }
 
 export default function HistoriquePage() {
@@ -93,6 +105,7 @@ export default function HistoriquePage() {
   const details = data?.detailPeriode?.details ?? []
   const comparaison = data?.comparaisonVsPrecedent ?? null
   const evolution = data?.evolution ?? []
+  const scoreParMois = (data?.scoreParMois ?? []).map((m) => ({ ...m, score: m.scorePct }))
 
   return (
     <div className="space-y-6">
@@ -144,14 +157,14 @@ export default function HistoriquePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-baseline gap-4">
-                <span className="text-4xl font-bold">{(scoreGlobal * 100).toFixed(1)}%</span>
+                <span className="text-4xl font-bold">{scoreGlobal.toFixed(1)}%</span>
                 {comparaison != null && (
                   <span
                     className={
                       comparaison >= 0 ? 'text-green-600 text-sm' : 'text-red-600 text-sm'
                     }
                   >
-                    {comparaison >= 0 ? '+' : ''}{(comparaison * 100).toFixed(1)}% vs période précédente
+                    {comparaison >= 0 ? '+' : ''}{comparaison.toFixed(1)}% vs période précédente
                   </span>
                 )}
               </div>
@@ -188,7 +201,7 @@ export default function HistoriquePage() {
                         <TableCell>{d.type || '—'}</TableCell>
                         <TableCell className="text-right">{d.cible}</TableCell>
                         <TableCell className="text-right">{d.realise}</TableCell>
-                        <TableCell className="text-right">{(d.taux * 100).toFixed(1)}%</TableCell>
+                        <TableCell className="text-right">{d.taux.toFixed(1)}%</TableCell>
                         <TableCell>{d.statut}</TableCell>
                       </TableRow>
                     ))}
@@ -197,6 +210,43 @@ export default function HistoriquePage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Score par mois (période sélectionnée) */}
+          {scoreParMois.length > 0 && (
+            <Card className="border-border/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BarChart3 className="h-5 w-5" />
+                  Score par mois
+                </CardTitle>
+                <CardDescription>
+                  Répartition mensuelle pour la période {selectedPeriodeCode}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart
+                    data={scoreParMois}
+                    margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                    <YAxis domain={[0, 120]} tickFormatter={(v) => `${v}%`} width={36} />
+                    <Tooltip
+                      formatter={(value: number) => [`${Number(value).toFixed(1)}%`, 'Score']}
+                      labelFormatter={(label) => label}
+                    />
+                    <ReferenceLine y={100} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" strokeOpacity={0.6} />
+                    <Bar dataKey="score" name="Score" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                      {scoreParMois.map((entry, index) => (
+                        <Cell key={index} fill={barColor(entry.score)} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Évolution sur toutes les périodes */}
           {evolution.length > 0 && (
@@ -213,17 +263,14 @@ export default function HistoriquePage() {
               <CardContent>
                 <ResponsiveContainer width="100%" height={280}>
                   <LineChart
-                    data={evolution.map((e) => ({
-                      ...e,
-                      scorePct: Math.round(e.scoreGlobal * 1000) / 10,
-                    }))}
+                    data={evolution}
                     margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="code" />
-                    <YAxis domain={[0, 1.2]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} />
+                    <YAxis domain={[0, 150]} tickFormatter={(v) => `${v}%`} />
                     <Tooltip
-                      formatter={(value: number) => [`${(value * 100).toFixed(1)}%`, 'Score']}
+                      formatter={(value: number) => [`${Number(value).toFixed(1)}%`, 'Score']}
                       labelFormatter={(label) => `Période ${label}`}
                     />
                     <Line

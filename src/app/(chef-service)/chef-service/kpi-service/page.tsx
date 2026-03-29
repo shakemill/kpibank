@@ -45,7 +45,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Calendar, Target, Edit, Plus, CheckCircle, Trash2, AlertTriangle } from 'lucide-react'
+import { Calendar, Target, Edit, Plus, CheckCircle, Trash2, AlertTriangle, BookOpen, Link2, Hash } from 'lucide-react'
+import { DialogDescription } from '@/components/ui/dialog'
 
 type Periode = {
   id: number
@@ -156,11 +157,13 @@ export default function KpiServicePage() {
 
   const fetchKpiDirections = useCallback(async () => {
     if (periodeId == null) return
-    const res = await fetch(`/api/kpi/direction-by-service?periodeId=${periodeId}`)
+    const params = new URLSearchParams({ periodeId: String(periodeId) })
+    if (serviceIdFromUrl) params.set('serviceId', serviceIdFromUrl)
+    const res = await fetch(`/api/kpi/direction-by-service?${params.toString()}`)
     if (!res.ok) return
     const data = await res.json()
     setKpiDirections(data)
-  }, [periodeId])
+  }, [periodeId, serviceIdFromUrl])
 
   const fetchServiceKpi = useCallback(async () => {
     if (periodeId == null) return
@@ -272,6 +275,7 @@ export default function KpiServicePage() {
         body: JSON.stringify({
           catalogueKpiId: parseInt(formCatalogueId, 10),
           periodeId,
+          ...(serviceIdFromUrl && { serviceId: parseInt(serviceIdFromUrl, 10) }),
           kpiDirectionId: formKpiDirectionId === 'none' ? null : parseInt(formKpiDirectionId, 10),
           poids_dans_direction: poidsDansDirectionNum,
           cible: cibleNum,
@@ -494,29 +498,42 @@ export default function KpiServicePage() {
       </Card>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="!w-[70vw] !max-w-[70vw]">
           <DialogHeader>
-            <DialogTitle>{editKpi ? 'Modifier le KPI service' : 'Ajouter un KPI service'}</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Poids restant disponible : <strong>{dynamicPoidsRestant.toFixed(1)}%</strong>
-            </p>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Target className="h-5 w-5 text-primary" />
+              </div>
+              <div className="space-y-1.5">
+                <DialogTitle>{editKpi ? 'Modifier le KPI service' : 'Ajouter un KPI service'}</DialogTitle>
+                <DialogDescription asChild>
+                  <p className="text-sm text-muted-foreground">
+                    Poids restant à répartir : <strong className="text-foreground">{dynamicPoidsRestant.toFixed(1)}%</strong>
+                    {dynamicPoidsRestant < 100 && (
+                      <span className="ml-1">— la somme des poids doit faire 100%</span>
+                    )}
+                  </p>
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-4">
-            {!editKpi && (
-              <>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Rechercher dans le catalogue</label>
+          <div className="space-y-6 pt-2">
+            {/* Section 1 — Choix du KPI */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <BookOpen className="h-4 w-4" />
+                KPI du catalogue
+              </div>
+              {!editKpi && (
+                <>
                   <Input
-                    placeholder="Filtrer par nom..."
+                    placeholder="Rechercher un KPI par nom..."
                     value={catalogueFilter}
                     onChange={(e) => setCatalogueFilter(e.target.value)}
-                    className="mb-2"
+                    className="h-9"
                   />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">KPI (catalogue)</label>
                   <Select value={formCatalogueId} onValueChange={setFormCatalogueId}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                       <SelectValue placeholder="Choisir un KPI du catalogue" />
                     </SelectTrigger>
                     <SelectContent>
@@ -527,19 +544,21 @@ export default function KpiServicePage() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              </>
-            )}
-            {editKpi && (
-              <div>
-                <label className="text-sm font-medium mb-2 block">KPI</label>
-                <p className="text-sm text-muted-foreground">{editKpi.catalogueKpi.nom}</p>
+                </>
+              )}
+              {editKpi && (
+                <p className="text-sm font-medium py-1">{editKpi.catalogueKpi.nom}</p>
+              )}
+            </div>
+
+            {/* Section 2 — Lien direction (optionnel) */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Link2 className="h-4 w-4" />
+                Lien avec un KPI direction (optionnel)
               </div>
-            )}
-            <div>
-              <label className="text-sm font-medium mb-2 block">KPI Direction parent (optionnel)</label>
               <Select value={formKpiDirectionId} onValueChange={setFormKpiDirectionId}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10">
                   <SelectValue placeholder="Aucun" />
                 </SelectTrigger>
                 <SelectContent>
@@ -551,52 +570,73 @@ export default function KpiServicePage() {
                   ))}
                 </SelectContent>
               </Select>
+              {formKpiDirectionId !== 'none' && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Contribution au KPI direction (%)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    value={formPoidsDansDirection}
+                    onChange={(e) => setFormPoidsDansDirection(e.target.value)}
+                    placeholder="0–100"
+                    className="h-10"
+                  />
+                </div>
+              )}
             </div>
-            {formKpiDirectionId !== 'none' && (
-              <div>
-                <label className="text-sm font-medium mb-2 block">Poids de contribution au KPI Direction (%)</label>
+
+            {/* Section 3 — Objectif et poids */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Hash className="h-4 w-4" />
+                Objectif et répartition
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Cible</label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={formCible}
+                    onChange={(e) => setFormCible(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Unité</label>
+                  <Input
+                    value={selectedCatalogueItem?.unite ?? editKpi?.catalogueKpi.unite ?? ''}
+                    readOnly
+                    className="h-10 bg-muted"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Poids du KPI (%)</label>
                 <Input
                   type="number"
                   min={0}
                   max={100}
                   step={0.5}
-                  value={formPoidsDansDirection}
-                  onChange={(e) => setFormPoidsDansDirection(e.target.value)}
-                  placeholder="0–100"
+                  value={formPoids}
+                  onChange={(e) => setFormPoids(e.target.value)}
+                  className="h-10 max-w-[140px]"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Répartition parmi les KPI actifs du service (total = 100%)
+                </p>
               </div>
-            )}
-            <div>
-              <label className="text-sm font-medium mb-2 block">Cible</label>
-              <Input
-                type="number"
-                step="any"
-                value={formCible}
-                onChange={(e) => setFormCible(e.target.value)}
-              />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Unité</label>
-              <Input
-                value={selectedCatalogueItem?.unite ?? editKpi?.catalogueKpi.unite ?? ''}
-                readOnly
-                className="bg-muted"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Poids (%)</label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={0.5}
-                value={formPoids}
-                onChange={(e) => setFormPoids(e.target.value)}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setModalOpen(false)}>Annuler</Button>
-              <Button onClick={handleSubmitKpi}>{editKpi ? 'Enregistrer' : 'Créer'}</Button>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button variant="outline" onClick={() => setModalOpen(false)}>
+                Annuler
+              </Button>
+              <Button onClick={handleSubmitKpi}>
+                {editKpi ? 'Enregistrer' : 'Ajouter le KPI'}
+              </Button>
             </div>
           </div>
         </DialogContent>

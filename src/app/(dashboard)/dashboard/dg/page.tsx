@@ -31,7 +31,21 @@ import {
 } from '@/components/ui/collapsible'
 import Link from 'next/link'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
-import { ChevronDown, ChevronRight, FileDown, Building2, Calendar, Users } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  FileDown,
+  Building2,
+  Calendar,
+  LayoutDashboard,
+  Layers,
+  Briefcase,
+  User,
+  AlertCircle,
+  Loader2,
+  Send,
+  UnfoldVertical,
+} from 'lucide-react'
 
 type Periode = { id: number; code: string; statut: string }
 type ChartDirection = { direction: string; taux: number }
@@ -135,9 +149,18 @@ export default function DashboardDGPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Tableau de bord DG</h1>
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center">
+            <AlertCircle className="h-6 w-6 text-destructive" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Tableau de bord DG</h1>
+            <p className="text-muted-foreground text-sm">Une erreur est survenue</p>
+          </div>
+        </div>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
             <p className="text-destructive">{error}</p>
           </CardContent>
         </Card>
@@ -148,20 +171,27 @@ export default function DashboardDGPage() {
   return (
     <div className="space-y-6 print:space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4 no-print">
-        <div>
-          <h1 className="text-2xl font-bold">Tableau de bord DG</h1>
-          <p className="text-muted-foreground">Vue d&apos;ensemble des directions et indicateurs.</p>
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+            <LayoutDashboard className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Tableau de bord DG</h1>
+            <p className="text-muted-foreground">Vue d&apos;ensemble des directions et indicateurs.</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {mounted ? (
-            <Select
-              value={periodeId?.toString() ?? ''}
-              onValueChange={(v) => setPeriodeId(v ? parseInt(v, 10) : null)}
-              disabled={loading}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Période" />
-              </SelectTrigger>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+              <Select
+                value={periodeId?.toString() ?? ''}
+                onValueChange={(v) => setPeriodeId(v ? parseInt(v, 10) : null)}
+                disabled={loading}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Période" />
+                </SelectTrigger>
               <SelectContent>
                 {periodes.map((p) => (
                   <SelectItem key={p.id} value={p.id.toString()}>
@@ -169,11 +199,13 @@ export default function DashboardDGPage() {
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+              </Select>
+            </div>
           ) : (
             <div className="h-9 w-[200px] rounded-md border border-input bg-muted/50" aria-hidden />
           )}
           <Button onClick={expandAll} variant="ghost" size="sm" className="gap-2">
+            <UnfoldVertical className="h-4 w-4" />
             Tout déplier
           </Button>
           <Button onClick={handlePrint} variant="outline" className="gap-2">
@@ -184,35 +216,52 @@ export default function DashboardDGPage() {
       </div>
 
       {loading && !data ? (
-        <Card><CardContent className="pt-6">Chargement…</CardContent></Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin shrink-0" />
+            <span>Chargement…</span>
+          </CardContent>
+        </Card>
       ) : data ? (
         <>
           {/* Cartes d'action rapide */}
           <div className="grid gap-4 sm:grid-cols-2">
             <Link href="/admin/periodes">
-              <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Périodes</CardTitle>
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <Calendar className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-medium">Périodes</CardTitle>
+                      <p className="text-xs text-muted-foreground mt-0.5">Gérer les périodes d&apos;évaluation</p>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-xs text-muted-foreground">Gérer les périodes d&apos;évaluation</p>
                   {data.nbPeriodesEnCours != null && (
-                    <p className="text-2xl font-bold mt-2">{data.nbPeriodesEnCours} en cours</p>
+                    <p className="text-2xl font-bold">{data.nbPeriodesEnCours} en cours</p>
                   )}
                 </CardContent>
               </Card>
             </Link>
             <Link href="/manager/assignation">
-              <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Assignations</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
+              <Card className="hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                      <Send className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-medium">Assignations</CardTitle>
+                      <p className="text-xs text-muted-foreground mt-0.5">Assigner des KPI aux Directeurs</p>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-xs text-muted-foreground">Assigner des KPI aux Directeurs</p>
                   {data.nbDirecteursSansKpi != null && (
-                    <p className="text-2xl font-bold mt-2">{data.nbDirecteursSansKpi} Directeur(s) sans KPI</p>
+                    <p className="text-2xl font-bold">{data.nbDirecteursSansKpi} Directeur(s) sans KPI</p>
                   )}
                 </CardContent>
               </Card>
@@ -222,11 +271,15 @@ export default function DashboardDGPage() {
           {/* BarChart directions */}
           <Card className="print:break-inside-avoid">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Performance par direction
-              </CardTitle>
-              <CardDescription>Taux d&apos;atteinte moyen par direction</CardDescription>
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Building2 className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Performance par direction</CardTitle>
+                  <CardDescription>Taux d&apos;atteinte moyen par direction</CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {data.chartDirections?.length > 0 ? (
@@ -250,15 +303,22 @@ export default function DashboardDGPage() {
           {/* Tableau consolidé drill-down */}
           <Card className="print:break-inside-avoid">
             <CardHeader>
-              <CardTitle>Vue consolidée Direction → Service → Employé</CardTitle>
-              <CardDescription>Déplier une direction pour voir les services et les scores employés</CardDescription>
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                  <Layers className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <CardTitle className="flex items-center gap-2">Vue consolidée Direction → Service → Employé</CardTitle>
+                  <CardDescription>Déplier une direction pour voir les services et les scores employés</CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {data.drillDown?.length > 0 ? (
                 <div className="space-y-2">
-                  {data.drillDown.map((dir) => (
+                  {data.drillDown.map((dir, idx) => (
                     <Collapsible
-                      key={dir.directionId}
+                      key={dir.directionId != null ? `dir-${dir.directionId}-${idx}` : `dir-${idx}`}
                       open={openDirections.has(dir.directionId)}
                       onOpenChange={() => toggleDirection(dir.directionId)}
                     >
@@ -268,10 +328,11 @@ export default function DashboardDGPage() {
                           className="w-full justify-start gap-2 no-print"
                         >
                           {openDirections.has(dir.directionId) ? (
-                            <ChevronDown className="h-4 w-4" />
+                            <ChevronDown className="h-4 w-4 shrink-0" />
                           ) : (
-                            <ChevronRight className="h-4 w-4" />
+                            <ChevronRight className="h-4 w-4 shrink-0" />
                           )}
+                          <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span className="font-medium">{dir.directionNom}</span>
                           <span className="text-muted-foreground ml-auto">{dir.taux.toFixed(0)} %</span>
                         </Button>
@@ -279,12 +340,20 @@ export default function DashboardDGPage() {
                       <CollapsibleContent>
                         <div className="pl-6 pt-2 space-y-4">
                           {dir.services.map((svc) => (
-                            <div key={svc.serviceId} className="border-l-2 pl-4">
-                              <p className="font-medium text-sm">{svc.serviceNom} — {svc.taux.toFixed(0)} %</p>
+                            <div key={svc.serviceId} className="border-l-2 border-primary/20 pl-4">
+                              <p className="font-medium text-sm flex items-center gap-2">
+                                <Briefcase className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                {svc.serviceNom} — {svc.taux.toFixed(0)} %
+                              </p>
                               <Table>
                                 <TableHeader>
                                   <TableRow>
-                                    <TableHead>Employé</TableHead>
+                                    <TableHead>
+                                      <span className="flex items-center gap-1.5">
+                                        <User className="h-3.5 w-3.5" />
+                                        Employé
+                                      </span>
+                                    </TableHead>
                                     <TableHead className="text-right">Score %</TableHead>
                                   </TableRow>
                                 </TableHeader>

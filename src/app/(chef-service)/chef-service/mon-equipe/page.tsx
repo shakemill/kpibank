@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   Card,
@@ -96,6 +97,8 @@ function kpiAssignesLabel(kpiTotalAssignes: number, sommePoids: number): { text:
 }
 
 export default function MonEquipePage() {
+  const searchParams = useSearchParams()
+  const serviceIdQuery = searchParams.get('serviceId')
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [periodeId, setPeriodeId] = useState<number | null>(null)
@@ -104,7 +107,10 @@ export default function MonEquipePage() {
   const [validationUser, setValidationUser] = useState<{ id: number; name: string } | null>(null)
 
   const fetchEquipe = useCallback(async () => {
-    const url = periodeId != null ? `/api/chef-service/equipe?periodeId=${periodeId}` : '/api/chef-service/equipe'
+    const params = new URLSearchParams()
+    if (periodeId != null) params.set('periodeId', String(periodeId))
+    if (serviceIdQuery) params.set('serviceId', serviceIdQuery)
+    const url = `/api/chef-service/equipe${params.toString() ? `?${params.toString()}` : ''}`
     const res = await fetch(url)
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
@@ -114,7 +120,7 @@ export default function MonEquipePage() {
     }
     const json = await res.json()
     setData(json)
-  }, [periodeId])
+  }, [periodeId, serviceIdQuery])
 
   const fetchSoumisesCount = useCallback(async () => {
     const now = new Date()

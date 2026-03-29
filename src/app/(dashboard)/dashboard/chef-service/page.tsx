@@ -181,7 +181,7 @@ export default function DashboardChefServicePage() {
       </div>
 
       {/* Section 1 — Mes KPI Personnels */}
-      <MesKpiPersoSection assigneParLabel="votre Directeur" lienSaisie="/saisie" />
+      <MesKpiPersoSection assigneParLabel="votre Directeur" lienSaisie="/saisie" showWhenEmpty />
 
       {loading && !data ? (
         <Card><CardContent className="pt-6">Chargement…</CardContent></Card>

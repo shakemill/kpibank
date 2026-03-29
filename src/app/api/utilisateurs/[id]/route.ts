@@ -73,15 +73,29 @@ export async function DELETE(
   if (Number.isNaN(id)) {
     return NextResponse.json({ error: 'ID invalide' }, { status: 400 })
   }
-  try {
-    await prisma.user.update({
-      where: { id },
-      data: { actif: false },
-    })
-    return NextResponse.json({ success: true })
-  } catch (e) {
+  const currentUserIdRaw = (result.session.user as { id?: number | string }).id
+  const currentUserId = typeof currentUserIdRaw === 'string' ? parseInt(currentUserIdRaw, 10) : currentUserIdRaw
+  if (!Number.isNaN(currentUserId) && currentUserId === id) {
     return NextResponse.json(
-      { error: 'Erreur lors de la désactivation', details: e instanceof Error ? e.message : e },
+      { error: 'Vous ne pouvez pas supprimer votre propre compte.' },
+      { status: 400 }
+    )
+  }
+  try {
+    await prisma.user.delete({ where: { id } })
+    return NextResponse.json({ success: true })
+  } catch (e: unknown) {
+    const prismaError = e as { code?: string }
+    if (prismaError?.code === 'P2003' || (e instanceof Error && e.message?.includes('Foreign key'))) {
+      return NextResponse.json(
+        {
+          error: 'Impossible de supprimer cet utilisateur : des données lui sont rattachées (KPI créés, assignations, paramètres modifiés, etc.). Désactivez-le à la place.',
+        },
+        { status: 409 }
+      )
+    }
+    return NextResponse.json(
+      { error: 'Erreur lors de la suppression', details: e instanceof Error ? e.message : String(e) },
       { status: 500 }
     )
   }

@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { toast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +15,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, Building2, Save } from 'lucide-react'
+import { ArrowLeft, Building2, Save, Upload, Trash2 } from 'lucide-react'
 
 type EtablissementRow = {
   id: number
@@ -27,9 +28,11 @@ export default function EtablissementPage() {
   const [etablissement, setEtablissement] = useState<EtablissementRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [nom, setNom] = useState('')
   const [logo, setLogo] = useState('')
   const [actif, setActif] = useState(true)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchEtablissement = useCallback(async () => {
     const res = await fetch('/api/etablissement')
@@ -52,6 +55,36 @@ export default function EtablissementPage() {
   const isDirty =
     etablissement &&
     (nom !== etablissement.nom || (logo || '') !== (etablissement.logo || '') || actif !== etablissement.actif)
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingLogo(true)
+    e.target.value = ''
+    try {
+      const formData = new FormData()
+      formData.set('file', file)
+      const res = await fetch('/api/etablissement/logo', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast({ title: 'Erreur', description: data?.error ?? 'Échec upload', variant: 'destructive' })
+        return
+      }
+      if (data.url) {
+        setLogo(data.url)
+        toast({ title: 'Image envoyée', description: 'Cliquez sur Enregistrer pour appliquer le logo.' })
+      }
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  const handleRemoveLogo = () => {
+    setLogo('')
+  }
 
   const handleSave = async () => {
     if (!isDirty) return
@@ -126,24 +159,65 @@ export default function EtablissementPage() {
                   id="nom"
                   value={nom}
                   onChange={(e) => setNom(e.target.value)}
-                  placeholder="Ex : Banque Nationale de Développement"
+                  placeholder="Ex : Ma Banque"
                   className="w-full"
                 />
               </div>
               <div className="space-y-2">
-                <label htmlFor="logo" className="text-sm font-medium">
-                  URL du logo (optionnel)
-                </label>
-                <Input
-                  id="logo"
-                  value={logo}
-                  onChange={(e) => setLogo(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full"
+                <span className="text-sm font-medium">Logo (optionnel)</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  className="hidden"
+                  onChange={handleLogoUpload}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Lien vers une image du logo (format URL). Laisser vide pour utiliser le logo par défaut.
-                </p>
+                <div className="flex flex-wrap items-start gap-4 rounded-lg border border-border/50 p-4">
+                  {logo ? (
+                    <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                      <Image
+                        src={logo}
+                        alt="Logo établissement"
+                        fill
+                        className="object-contain"
+                        sizes="80px"
+                        unoptimized
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                      <Building2 className="h-8 w-8" />
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 w-fit"
+                      disabled={uploadingLogo}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="h-4 w-4" />
+                      {uploadingLogo ? 'Envoi…' : 'Choisir une image'}
+                    </Button>
+                    {logo && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="gap-2 w-fit text-destructive hover:text-destructive"
+                        onClick={handleRemoveLogo}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Supprimer le logo
+                      </Button>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      PNG, JPEG, GIF ou WebP. Max. 2 Mo.
+                    </p>
+                  </div>
+                </div>
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
                 <div>

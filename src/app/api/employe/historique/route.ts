@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { consolidateEmploye } from '@/lib/consolidation'
+import { calculerTauxAtteinte, type TypeKpi } from '@/lib/saisie-utils'
+
+const MOIS_LABELS: Record<number, string> = {
+  1: 'Janv.', 2: 'Fév.', 3: 'Mars', 4: 'Avr.', 5: 'Mai', 6: 'Juin',
+  7: 'Juil.', 8: 'Août', 9: 'Sept.', 10: 'Oct.', 11: 'Nov.', 12: 'Déc.',
+}
 
 export async function GET(request: NextRequest) {
   const session = await auth()
@@ -44,7 +50,7 @@ export async function GET(request: NextRequest) {
     const periodes = await prisma.periode.findMany({
       where: { actif: true },
       orderBy: [{ annee: 'asc' }, { date_debut: 'asc' }],
-      select: { id: true, code: true, date_debut: true, date_fin: true },
+      select: { id: true, code: true, date_debut: true, date_fin: true, mois_debut: true, mois_fin: true, annee: true },
     })
 
     const periodeSelected = periodes.find((p) => p.id === periodeId)
@@ -111,12 +117,56 @@ export async function GET(request: NextRequest) {
       evolution.push({ periodeId: p.id, code: p.code, scoreGlobal })
     }
 
+    let scoreParMois: { mois: number; annee: number; label: string; scorePct: number }[] = []
+    if (periodeSelected) {
+      const kpiEmployes = await prisma.kpiEmploye.findMany({
+        where: { employeId: userId, periodeId },
+        select: { id: true, cible: true, poids: true, catalogueKpi: { select: { type: true } } },
+      })
+      const kpiIds = kpiEmployes.map((k) => k.id)
+      const saisies = await prisma.saisieMensuelle.findMany({
+        where: {
+          kpiEmployeId: { in: kpiIds },
+          statut: { in: ['VALIDEE', 'AJUSTEE'] },
+          mois: { gte: periodeSelected.mois_debut, lte: periodeSelected.mois_fin },
+          annee: periodeSelected.annee,
+        },
+        select: { kpiEmployeId: true, mois: true, annee: true, valeur_realisee: true, valeur_ajustee: true },
+      })
+      const moisDebut = periodeSelected.mois_debut
+      const moisFin = periodeSelected.mois_fin
+      const annee = periodeSelected.annee
+      for (let m = moisDebut; m <= moisFin; m++) {
+        let sumPonds = 0
+        let sumPoids = 0
+        for (const ke of kpiEmployes) {
+          const s = saisies.find(
+            (x) => x.kpiEmployeId === ke.id && x.mois === m && x.annee === annee
+          )
+          const valeur = s ? (s.valeur_ajustee ?? s.valeur_realisee) : null
+          if (valeur == null || Number.isNaN(valeur)) continue
+          const typeKpi = (ke.catalogueKpi?.type ?? 'QUANTITATIF') as TypeKpi
+          const taux = calculerTauxAtteinte(valeur, ke.cible, typeKpi) / 100
+          sumPonds += taux * ke.poids
+          sumPoids += ke.poids
+        }
+        const scorePct = sumPoids > 0 ? Math.round((sumPonds / sumPoids) * 1000) / 10 : 0
+        scoreParMois.push({
+          mois: m,
+          annee,
+          label: `${MOIS_LABELS[m]} ${annee}`,
+          scorePct,
+        })
+      }
+    }
+
     return NextResponse.json({
       periodeId,
       periodeCode: periodeSelected?.code ?? '',
       detailPeriode,
       comparaisonVsPrecedent,
       evolution,
+      scoreParMois,
       periodes: periodes.map((p) => ({ id: p.id, code: p.code })),
     })
   } catch (e) {

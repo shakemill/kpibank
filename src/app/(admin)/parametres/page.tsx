@@ -65,6 +65,7 @@ export default function ParametresPage() {
   const [confirmSave, setConfirmSave] = useState<{ cle: string; valeur: string } | null>(null)
   const [testEmailTo, setTestEmailTo] = useState('')
   const [testEmailSending, setTestEmailSending] = useState(false)
+  const [verifySending, setVerifySending] = useState(false)
 
   const fetchParams = useCallback(async () => {
     const res = await fetch('/api/parametres')
@@ -106,6 +107,25 @@ export default function ParametresPage() {
     fetchParams()
   }
 
+  const handleVerifySmtp = async () => {
+    setVerifySending(true)
+    try {
+      const res = await fetch('/api/admin/verify-smtp')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast({
+          title: 'Connexion SMTP échouée',
+          description: data?.error ?? data?.message ?? 'Vérifiez MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD dans .env',
+          variant: 'destructive',
+        })
+        return
+      }
+      toast({ title: 'Connexion SMTP OK', description: `Serveur ${data.config?.host}:${data.config?.port}` })
+    } finally {
+      setVerifySending(false)
+    }
+  }
+
   const handleTestEmail = async () => {
     const to = testEmailTo.trim()
     if (!to) {
@@ -121,10 +141,18 @@ export default function ParametresPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast({ title: 'Erreur', description: data?.error ?? 'Échec envoi', variant: 'destructive' })
+        const details = data?.details ? (typeof data.details === 'string' ? data.details : JSON.stringify(data.details)) : null
+        toast({
+          title: 'Erreur envoi',
+          description: data?.error ?? 'Échec envoi' + (details ? ` — ${details}` : ''),
+          variant: 'destructive',
+        })
         return
       }
-      toast({ title: 'Email envoyé', description: `Message de test envoyé à ${to}.` })
+      toast({
+        title: 'Email envoyé',
+        description: `Message de test envoyé à ${to}. Vérifiez les spams si vous ne le voyez pas.`,
+      })
     } finally {
       setTestEmailSending(false)
     }
@@ -164,7 +192,10 @@ export default function ParametresPage() {
                 <CardDescription>Clés de configuration et valeurs</CardDescription>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={handleVerifySmtp} disabled={verifySending} variant="outline" size="sm" className="gap-2 h-9">
+                {verifySending ? 'Vérification…' : 'Vérifier SMTP'}
+              </Button>
               <Input
                 type="email"
                 placeholder="email@test.com"

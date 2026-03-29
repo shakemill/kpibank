@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { calculerPoidsRestantEmploye } from '@/lib/kpi-utils'
 import { kpiEmployeCreateSchema } from '@/lib/validations/kpi'
 import { notifierKpiAssigne } from '@/lib/notifications'
-import { getCollaborateursAssignables, peutAssignerA } from '@/lib/assignation-rules'
+import { peutAssignerA, getCollaborateursAssignables } from '@/lib/assignation-rules'
 
 const MANAGER_ROLES = ['MANAGER', 'DG', 'DIRECTEUR', 'CHEF_SERVICE']
 
@@ -28,6 +28,44 @@ export async function GET(request: NextRequest) {
   const periodeIdParam = searchParams.get('periodeId')
   const statutParam = searchParams.get('statut')
 
+  const sessionUser = session.user as { id?: string; role?: string; serviceId?: number | null; directionId?: number | null }
+
+  // Cas spécial : page Contestations — liste des KPI contestés de toute l'équipe du manager
+  if (MANAGER_ROLES.includes(role) && !employeIdParam && statutParam === 'CONTESTE') {
+    const collaborateurs = await getCollaborateursAssignables({
+      id: userIdNum,
+      role: sessionUser.role ?? '',
+      serviceId: sessionUser.serviceId ?? null,
+      directionId: sessionUser.directionId ?? null,
+    })
+    const employeIds = collaborateurs.map((c) => c.id)
+    if (employeIds.length === 0) {
+      return NextResponse.json({ list: [] })
+    }
+    try {
+      const list = await prisma.kpiEmploye.findMany({
+        where: {
+          employeId: { in: employeIds },
+          statut: 'CONTESTE',
+        },
+        include: {
+          catalogueKpi: true,
+          kpiService: { include: { catalogueKpi: { select: { nom: true } }, service: { select: { nom: true, code: true } } } },
+          periode: { select: { id: true, code: true, statut: true } },
+          employe: { select: { id: true, nom: true, prenom: true, email: true } },
+          assignePar: { select: { id: true, nom: true, prenom: true } },
+        },
+        orderBy: [{ employeId: 'asc' }, { id: 'asc' }],
+      })
+      return NextResponse.json({ list })
+    } catch (e) {
+      return NextResponse.json(
+        { error: 'Erreur serveur', details: e instanceof Error ? e.message : e },
+        { status: 500 }
+      )
+    }
+  }
+
   let targetEmployeId: number | null = null
   if (role === 'EMPLOYE') {
     targetEmployeId = userIdNum
@@ -40,8 +78,6 @@ export async function GET(request: NextRequest) {
       where: { id: employeId },
       select: { id: true, managerId: true, role: true },
     })
-    const { peutAssignerA } = await import('@/lib/assignation-rules')
-    const sessionUser = session.user as { id?: string; role?: string; serviceId?: number | null; directionId?: number | null }
     const autorise = await peutAssignerA(
       {
         id: userIdNum,
@@ -56,53 +92,8 @@ export async function GET(request: NextRequest) {
     }
     targetEmployeId = employeId
   } else if (MANAGER_ROLES.includes(role) && !employeIdParam) {
-    // Liste des KPI de tous les collaborateurs assignables (périmètre organisationnel)
-    const { getCollaborateursAssignables } = await import('@/lib/assignation-rules')
-    const sessionUser = session.user as { id?: string; role?: string; serviceId?: number | null; directionId?: number | null }
-    const collaborateurs = await getCollaborateursAssignables({
-      id: userIdNum,
-      role: sessionUser.role ?? '',
-      serviceId: sessionUser.serviceId ?? null,
-      directionId: sessionUser.directionId ?? null,
-    })
-    const ids = collaborateurs.map((c) => c.id)
-    if (ids.length === 0) {
-      return NextResponse.json({ list: [], equipe: true })
-    }
-    const where: {
-      employeId: { in: number[] }
-      periodeId?: number
-      statut?: 'DRAFT' | 'NOTIFIE' | 'ACCEPTE' | 'CONTESTE' | 'MAINTENU' | 'REVISE' | 'VALIDE' | 'CLOTURE'
-    } = {
-      employeId: { in: ids },
-    }
-    if (periodeIdParam) {
-      const periodeId = parseInt(periodeIdParam, 10)
-      if (!Number.isNaN(periodeId)) where.periodeId = periodeId
-    }
-    const statutValues = ['DRAFT', 'NOTIFIE', 'ACCEPTE', 'CONTESTE', 'MAINTENU', 'REVISE', 'VALIDE', 'CLOTURE'] as const
-    if (statutParam && statutValues.includes(statutParam as (typeof statutValues)[number])) {
-      where.statut = statutParam as (typeof statutValues)[number]
-    }
-    try {
-      const list = await prisma.kpiEmploye.findMany({
-        where,
-        include: {
-          catalogueKpi: true,
-          kpiService: { include: { catalogueKpi: { select: { nom: true } }, service: { select: { nom: true, code: true } } } },
-          periode: { select: { id: true, code: true, statut: true } },
-          employe: { select: { id: true, nom: true, prenom: true, email: true } },
-          assignePar: { select: { id: true, nom: true, prenom: true } },
-        },
-        orderBy: [{ employeId: 'asc' }, { id: 'asc' }],
-      })
-      return NextResponse.json({ list, equipe: true })
-    } catch (e) {
-      return NextResponse.json(
-        { error: 'Erreur serveur', details: e instanceof Error ? e.message : e },
-        { status: 500 }
-      )
-    }
+    // "Mes KPI personnels" : retourner les KPI de l'utilisateur connecté (comme pour un employé)
+    targetEmployeId = userIdNum
   } else {
     return NextResponse.json({ error: 'Paramètres invalides' }, { status: 400 })
   }
