@@ -46,6 +46,26 @@ enum ModeAgregation {
   DERNIER
 }
 
+enum CategorieKpi {
+  STRATEGIQUE
+  OPERATIONNEL
+}
+
+enum FrequenceKpi {
+  MENSUELLE
+  TRIMESTRIELLE
+  SEMESTRIELLE
+  ANNUELLE
+  EVENEMENTIELLE
+}
+
+enum SensCalculKpi {
+  DIRECT
+  PLAFOND
+  ZERO_DEFAUT
+  ABSOLU
+}
+
 enum StatutKpi {
   DRAFT
   ACTIF
@@ -86,6 +106,12 @@ enum TypeNotification {
   PERIODE_CLOTUREE
 }
 
+enum PorteeKpi {
+  DIRECTION
+  SERVICE
+  INDIVIDUEL
+}
+
 // ---------------------------------------------------------------------------
 // Organisation
 // ---------------------------------------------------------------------------
@@ -112,6 +138,7 @@ model Direction {
   services        Service[]
   kpiDirections  KpiDirection[]
   consolidationsDirection ConsolidationDirection[]
+  catalogueKpis   DirectionCatalogueKpi[]
 }
 
 model Service {
@@ -140,6 +167,7 @@ model User {
   email                String    @unique
   password             String
   telephone            String?
+  posteOccupe          String?
   role                 Role
   actif                Boolean   @default(true)
   force_password_change Boolean  @default(false)
@@ -160,6 +188,7 @@ model User {
   kpiDirectionsCrees   KpiDirection[]
   kpiServicesCrees     KpiService[]
   saisiesValidees      SaisieMensuelle[] @relation("SaisieValidePar")
+  saisiesDirectionValidees SaisieDirection[] @relation("SaisieDirectionValidePar")
   parametresModifies   Parametre[]
   notifications        Notification[]
   accounts             Account[]
@@ -167,6 +196,7 @@ model User {
   auditLogs            AuditLog[]
   saisiePeriodesOuvertesPar   SaisiePeriodeOuverte[] @relation("SaisiePeriodesOuvertesPar")
   saisiePeriodesOuvertesPour  SaisiePeriodeOuverte[] @relation("SaisiePeriodesOuvertesPour")
+  directionCatalogueKpisCrees DirectionCatalogueKpi[] @relation("DirectionCatalogueKpiCreePar")
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +219,7 @@ model Periode {
   kpiServices         KpiService[]
   kpiEmployes         KpiEmploye[]
   scorePeriodes       ScorePeriode[]
+  scorePeriodesDirection ScorePeriodeDirection[]
   consolidationsService   ConsolidationService[]
   consolidationsDirection ConsolidationDirection[]
 }
@@ -199,15 +230,36 @@ model Periode {
 
 model CatalogueKpi {
   id               Int      @id @default(autoincrement())
+  code             String?  @unique
   nom              String
   description      String?
+  objectif_qualite String?
+  formule          String?
   type             TypeKpi
+  categorie        CategorieKpi?
+  frequence        FrequenceKpi?
+  sens_calcul      SensCalculKpi @default(DIRECT)
   unite            String?
   mode_agregation  ModeAgregation
+  portee           PorteeKpi @default(INDIVIDUEL)
   actif            Boolean  @default(true)
   kpiDirections    KpiDirection[]
   kpiServices      KpiService[]
   kpiEmployes      KpiEmploye[]
+  directionCatalogueKpis DirectionCatalogueKpi[]
+}
+
+model DirectionCatalogueKpi {
+  id             Int          @id @default(autoincrement())
+  directionId    Int
+  catalogueKpiId Int
+  creeParId      Int?
+  createdAt      DateTime     @default(now())
+  direction      Direction    @relation(fields: [directionId], references: [id], onDelete: Cascade)
+  catalogueKpi   CatalogueKpi @relation(fields: [catalogueKpiId], references: [id], onDelete: Cascade)
+  creePar        User?        @relation("DirectionCatalogueKpiCreePar", fields: [creeParId], references: [id], onDelete: SetNull)
+  @@unique([directionId, catalogueKpiId])
+  @@index([directionId])
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +281,8 @@ model KpiDirection {
   periode                   Periode      @relation(fields: [periodeId], references: [id], onDelete: Cascade)
   creePar                   User         @relation(fields: [creeParId], references: [id], onDelete: Restrict)
   kpiServices               KpiService[]
+  saisiesDirection          SaisieDirection[]
+  scorePeriodes             ScorePeriodeDirection[]
 }
 
 model KpiService {
@@ -305,6 +359,30 @@ model SaisieMensuelle {
   @@index([employeId, mois, annee, statut])
 }
 
+model SaisieDirection {
+  id               Int      @id @default(autoincrement())
+  kpiDirectionId   Int
+  mois             Int
+  annee            Int
+  valeur_prevue    Float?
+  valeur_realisee  Float?
+  commentaire      String?
+  statut           StatutSaisie
+  en_retard        Boolean  @default(false)
+  soumis_le        DateTime?
+  valideParId      Int?
+  valide_le        DateTime?
+  valeur_ajustee   Float?
+  motif_ajustement String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  kpiDirection     KpiDirection @relation(fields: [kpiDirectionId], references: [id], onDelete: Cascade)
+  validePar        User?    @relation("SaisieDirectionValidePar", fields: [valideParId], references: [id], onDelete: SetNull)
+  @@unique([kpiDirectionId, mois, annee])
+  @@index([kpiDirectionId, statut])
+  @@index([mois, annee, statut])
+}
+
 // Période de saisie rouverte par le N+1 (saisie dépassée)
 model SaisiePeriodeOuverte {
   id          Int      @id @default(autoincrement())
@@ -335,6 +413,18 @@ model ScorePeriode {
   @@index([kpiEmployeId, periodeId])
 }
 
+model ScorePeriodeDirection {
+  id              Int      @id @default(autoincrement())
+  kpiDirectionId  Int
+  periodeId       Int
+  valeur_agregee  Float
+  taux_atteinte   Float
+  calcule_le      DateTime
+  kpiDirection    KpiDirection @relation(fields: [kpiDirectionId], references: [id], onDelete: Cascade)
+  periode         Periode      @relation(fields: [periodeId], references: [id], onDelete: Cascade)
+  @@index([kpiDirectionId, periodeId])
+}
+
 model ConsolidationService {
   id                        Int      @id @default(autoincrement())
   serviceId                 Int
@@ -353,10 +443,30 @@ model ConsolidationDirection {
   directionId         Int
   periodeId           Int
   taux_atteinte_moyen Float
+  score_direction_kpis Float   @default(0)
+  score_employes      Float    @default(0)
   calcule_le          DateTime
   direction           Direction @relation(fields: [directionId], references: [id], onDelete: Cascade)
   periode             Periode   @relation(fields: [periodeId], references: [id], onDelete: Cascade)
   @@index([directionId, periodeId])
+}
+
+// ---------------------------------------------------------------------------
+// Grille de notation (paramétrable)
+// ---------------------------------------------------------------------------
+
+model NotationGrilleNiveau {
+  id              Int      @id @default(autoincrement())
+  niveau          String   @unique
+  ordre           Int
+  seuilMin        Float
+  seuilMax        Float?
+  notationLibelle String?
+  appreciation    String
+  commentaire     String
+  updatedAt       DateTime @updatedAt
+
+  @@index([ordre])
 }
 
 // ---------------------------------------------------------------------------

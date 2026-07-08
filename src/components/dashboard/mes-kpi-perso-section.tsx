@@ -15,6 +15,7 @@ import { RadialBarChart, RadialBar, ResponsiveContainer } from 'recharts'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { Target, AlertTriangle, ClipboardList, BarChart3, Star, TrendingUp } from 'lucide-react'
+import { isKpiSaisissable } from '@/lib/kpi-statut'
 
 type KpiPersoItem = {
   id: number
@@ -58,11 +59,27 @@ interface MesKpiPersoSectionProps {
   /** Ex. "le DG" ou "votre Chef de service". Utilisé si aucun KPI n'a d'assigneur. */
   assigneParLabel?: string
   lienSaisie?: string
+  /** Lien vers la page détaillée (ex. /employe/mes-kpi). */
+  lienDetail?: string
+  /** Titre de la section (sans le code période). */
+  sectionTitle?: string
+  /** Texte d'aide sous le titre, en plus de la ligne « Assignés par ». */
+  sectionHint?: string
   /** Si true, affiche une carte explicative quand aucun KPI n'est assigné (ex. pour le chef de service). */
   showWhenEmpty?: boolean
+  /** Style visuel : secondary = plus discret sur les tableaux de bord managériaux. */
+  variant?: 'default' | 'secondary'
 }
 
-export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie = '/saisie', showWhenEmpty = false }: MesKpiPersoSectionProps) {
+export function MesKpiPersoSection({
+  assigneParLabel = 'votre N+1',
+  lienSaisie = '/saisie',
+  lienDetail,
+  sectionTitle = 'Mes objectifs personnels',
+  sectionHint,
+  showWhenEmpty = false,
+  variant = 'default',
+}: MesKpiPersoSectionProps) {
   const [list, setList] = useState<KpiPersoItem[]>([])
   const [loading, setLoading] = useState(true)
   const now = new Date()
@@ -90,7 +107,7 @@ export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie =
 
   const periodeActive = list.find((k) => k.periode?.statut === 'EN_COURS')?.periode
   const kpisPeriodeActive = list.filter((k) => k.periode?.statut === 'EN_COURS')
-  const kpisValides = kpisPeriodeActive.filter((k) => k.statut === 'VALIDE')
+  const kpisValides = kpisPeriodeActive.filter((k) => isKpiSaisissable(k.statut))
   const dateLimite = periodeActive?.date_limite_saisie
     ? new Date(periodeActive.date_limite_saisie)
     : null
@@ -105,12 +122,19 @@ export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie =
       ? kpisPeriodeActive.reduce((s, k) => s + k.tauxAtteinte * (k.poids / 100), 0)
       : 0
   const radialData = [{ name: 'Perso', value: Math.min(100, Math.round(tauxGlobal)), fill: '#3b82f6' }]
+  const cardClass =
+    variant === 'secondary'
+      ? 'border-border/60 bg-muted/20'
+      : 'border-primary/20 bg-primary/5'
+  const assigneParLine = kpisPeriodeActive[0]?.assignePar
+    ? `${kpisPeriodeActive[0].assignePar.prenom} ${kpisPeriodeActive[0].assignePar.nom}`
+    : assigneParLabel
 
   if (loading) {
     return (
-      <Card className="border-primary/20 bg-primary/5">
+      <Card className={cardClass}>
         <CardContent className="pt-6">
-          <p className="text-muted-foreground">Chargement de vos KPI personnels…</p>
+          <p className="text-muted-foreground">Chargement de vos KPI…</p>
         </CardContent>
       </Card>
     )
@@ -119,14 +143,15 @@ export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie =
   if (list.length === 0) {
     if (showWhenEmpty) {
       return (
-        <Card className="border-primary/20 bg-primary/5">
+        <Card className={cardClass}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
-              Mes objectifs personnels
+              {sectionTitle}
             </CardTitle>
             <CardDescription>
-              Aucun KPI personnel assigné pour le moment. Vos objectifs assignés par votre directeur apparaîtront ici.
+              {sectionHint ??
+                'Aucun KPI personnel assigné pour le moment. Vos objectifs assignés par votre directeur apparaîtront ici.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -151,7 +176,7 @@ export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie =
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             <span>
-              Vous avez {kpisASaisir.length} KPI personnels à saisir
+              Vous avez {kpisASaisir.length} KPI à saisir
               {dateLimite ? ` avant le ${dateLimite.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}.
             </span>
             <Link href={lienSaisie}>
@@ -162,17 +187,27 @@ export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie =
       )}
 
       {/* Section A — Score personnel */}
-      <Card className="border-primary/20 bg-primary/5">
+      <Card className={cardClass}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5" />
-            Mes objectifs personnels — {periodeActive?.code ?? 'Période'}
-          </CardTitle>
-          <CardDescription>
-            Assignés par : {kpisPeriodeActive[0]?.assignePar
-              ? `${kpisPeriodeActive[0].assignePar.prenom} ${kpisPeriodeActive[0].assignePar.nom}`
-              : assigneParLabel}
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Target className="h-5 w-5 shrink-0" />
+                {sectionTitle} — {periodeActive?.code ?? 'Période'}
+              </CardTitle>
+              <CardDescription className="space-y-0.5">
+                {sectionHint && <span className="block">{sectionHint}</span>}
+                <span className="block">Assignés par : {assigneParLine}</span>
+              </CardDescription>
+            </div>
+            {lienDetail && (
+              <Link href={lienDetail}>
+                <Button variant="outline" size="sm" className="shrink-0">
+                  Voir le détail
+                </Button>
+              </Link>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex flex-col sm:flex-row items-start gap-6">
@@ -196,7 +231,7 @@ export function MesKpiPersoSection({ assigneParLabel = 'votre N+1', lienSaisie =
               {kpisPeriodeActive.map((kpi) => {
                 const saisieMois = kpi.saisiesMensuelles.find((s) => s.mois === moisCourant && s.annee === anneeCourant)
                 const statutSaisie = saisieMois?.statut ?? 'OUVERTE'
-                const peutSaisir = kpi.statut === 'VALIDE' && saisieOuverte && !['SOUMISE', 'VALIDEE', 'AJUSTEE'].includes(statutSaisie)
+                const peutSaisir = isKpiSaisissable(kpi.statut) && saisieOuverte && !['SOUMISE', 'VALIDEE', 'AJUSTEE'].includes(statutSaisie)
                 return (
                   <div
                     key={kpi.id}

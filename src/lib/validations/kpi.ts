@@ -3,20 +3,38 @@ import { z } from 'zod'
 const typeKpiEnum = z.enum(['QUANTITATIF', 'QUALITATIF', 'COMPORTEMENTAL'])
 const modeAgregationEnum = z.enum(['CUMUL', 'MOYENNE', 'DERNIER'])
 const statutKpiEnum = z.enum(['DRAFT', 'ACTIF', 'CLOTURE'])
+const categorieKpiEnum = z.enum(['STRATEGIQUE', 'OPERATIONNEL'])
+const frequenceKpiEnum = z.enum(['MENSUELLE', 'TRIMESTRIELLE', 'SEMESTRIELLE', 'ANNUELLE', 'EVENEMENTIELLE'])
+const sensCalculKpiEnum = z.enum(['DIRECT', 'PLAFOND', 'ZERO_DEFAUT', 'ABSOLU'])
+const porteeKpiEnum = z.enum(['DIRECTION', 'SERVICE', 'INDIVIDUEL'])
 
 export const catalogueKpiCreateSchema = z.object({
+  code: z.string().optional().nullable(),
   nom: z.string().min(1, 'Le nom est requis'),
   description: z.string().optional().nullable(),
+  objectif_qualite: z.string().optional().nullable(),
+  formule: z.string().optional().nullable(),
   type: typeKpiEnum,
+  categorie: categorieKpiEnum.optional().nullable(),
+  frequence: frequenceKpiEnum.optional().nullable(),
+  sens_calcul: sensCalculKpiEnum.optional(),
+  portee: porteeKpiEnum.optional(),
   unite: z.string().optional().nullable(),
   mode_agregation: modeAgregationEnum,
   actif: z.boolean().optional(),
 })
 
 export const catalogueKpiUpdateSchema = z.object({
+  code: z.string().optional().nullable(),
   nom: z.string().min(1).optional(),
   description: z.string().optional().nullable(),
+  objectif_qualite: z.string().optional().nullable(),
+  formule: z.string().optional().nullable(),
   type: typeKpiEnum.optional(),
+  categorie: categorieKpiEnum.optional().nullable(),
+  frequence: frequenceKpiEnum.optional().nullable(),
+  sens_calcul: sensCalculKpiEnum.optional(),
+  portee: porteeKpiEnum.optional(),
   unite: z.string().optional().nullable(),
   mode_agregation: modeAgregationEnum.optional(),
   actif: z.boolean().optional(),

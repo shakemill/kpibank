@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { serviceUpdateSchema } from '@/lib/validations/organisation'
+import { trouverChefService } from '@/lib/service-chef-utils'
 
 export async function PUT(
   request: NextRequest,
@@ -36,7 +37,6 @@ export async function PUT(
         ...(parsed.data.code != null && { code: parsed.data.code }),
         ...(parsed.data.description !== undefined && { description: parsed.data.description }),
         ...(parsed.data.directionId != null && { directionId: parsed.data.directionId }),
-        ...(parsed.data.responsableId !== undefined && { responsableId: parsed.data.responsableId }),
         ...(parsed.data.actif !== undefined && { actif: parsed.data.actif }),
       },
       include: {
@@ -45,7 +45,8 @@ export async function PUT(
         _count: { select: { employes: true } },
       },
     })
-    return NextResponse.json(service)
+    const chefService = await trouverChefService(service.id)
+    return NextResponse.json({ ...service, chefService })
   } catch (e) {
     return NextResponse.json(
       { error: 'Erreur lors de la mise à jour', details: e instanceof Error ? e.message : e },

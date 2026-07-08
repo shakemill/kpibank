@@ -62,9 +62,13 @@ type Periode = {
 
 type CatalogueItem = {
   id: number
+  code: string | null
   nom: string
   description: string | null
+  objectif_qualite: string | null
   type: string
+  categorie: string | null
+  frequence: string | null
   unite: string | null
   mode_agregation: string
   actif: boolean
@@ -102,6 +106,19 @@ const STATUT_PERIODE_MAP: Record<string, { label: string; className: string }> =
   CLOTUREE: { label: 'Clôturée', className: 'bg-red-500/10 text-red-700 dark:text-red-400' },
 }
 
+const CATEGORIE_LABEL: Record<string, string> = {
+  STRATEGIQUE: 'Stratégique',
+  OPERATIONNEL: 'Opérationnel',
+}
+
+const FREQUENCE_LABEL: Record<string, string> = {
+  MENSUELLE: 'Mensuelle',
+  TRIMESTRIELLE: 'Trimestrielle',
+  SEMESTRIELLE: 'Semestrielle',
+  ANNUELLE: 'Annuelle',
+  EVENEMENTIELLE: 'Événementielle',
+}
+
 const STATUT_KPI_MAP: Record<string, { label: string; className: string }> = {
   DRAFT: { label: 'Brouillon', className: 'bg-muted text-muted-foreground' },
   ACTIF: { label: 'Actif', className: 'bg-green-500/10 text-green-700 dark:text-green-400' },
@@ -112,6 +129,7 @@ export default function KpiDirectionPage() {
   const router = useRouter()
   const { data: session } = useSession()
   const role = (session?.user as { role?: string })?.role ?? ''
+  const sessionDirectionId = (session?.user as { directionId?: number })?.directionId ?? null
   const isDG = role === 'DG'
   const [periodes, setPeriodes] = useState<Periode[]>([])
   const [periodeId, setPeriodeId] = useState<number | null>(null)
@@ -146,15 +164,18 @@ export default function KpiDirectionPage() {
     if (data.length > 0 && !periodeId) setPeriodeId(data[0].id)
   }, [periodeId])
 
-  const fetchCatalogue = useCallback(async () => {
-    const res = await fetch('/api/kpi/catalogue')
+  const fetchCatalogue = useCallback(async (directionId: number) => {
+    const res = await fetch(`/api/organisation/directions/${directionId}/kpi-catalogue`)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
       toast.error(data?.error ?? 'Chargement catalogue')
       return
     }
     const data = await res.json()
-    setCatalogue(data.filter((c: CatalogueItem) => c.actif))
+    const items = (Array.isArray(data) ? data : [])
+      .map((row: { catalogueKpi: CatalogueItem }) => row.catalogueKpi)
+      .filter((c: CatalogueItem) => c.actif)
+    setCatalogue(items)
   }, [])
 
   const fetchDirections = useCallback(async () => {
@@ -195,13 +216,24 @@ export default function KpiDirectionPage() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    const promises: Promise<void>[] = [fetchPeriodes(), fetchCatalogue()]
+    const promises: Promise<void>[] = [fetchPeriodes()]
     if (isDG) promises.push(fetchDirections())
     Promise.all(promises).finally(() => {
       if (!cancelled) setLoading(false)
     })
     return () => { cancelled = true }
-  }, [fetchPeriodes, fetchCatalogue, isDG, fetchDirections])
+  }, [fetchPeriodes, isDG, fetchDirections])
+
+  useEffect(() => {
+    const directionId = isDG
+      ? (selectedDirectionId ? parseInt(selectedDirectionId, 10) : null)
+      : sessionDirectionId
+    if (directionId == null || Number.isNaN(directionId)) {
+      setCatalogue([])
+      return
+    }
+    fetchCatalogue(directionId)
+  }, [isDG, selectedDirectionId, sessionDirectionId, fetchCatalogue])
 
   useEffect(() => {
     if (periodeId != null && (!isDG || selectedDirectionId)) fetchDirectionKpi()
@@ -466,7 +498,10 @@ export default function KpiDirectionPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Code</TableHead>
                     <TableHead>KPI</TableHead>
+                    <TableHead>Catégorie</TableHead>
+                    <TableHead>Fréquence</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Cible</TableHead>
                     <TableHead>Unité</TableHead>
@@ -478,7 +513,20 @@ export default function KpiDirectionPage() {
                 <TableBody>
                   {(directionData?.list ?? []).map((k) => (
                     <TableRow key={k.id}>
-                      <TableCell className="font-medium">{k.catalogueKpi.nom}</TableCell>
+                      <TableCell className="font-mono text-xs">{k.catalogueKpi.code ?? '—'}</TableCell>
+                      <TableCell className="font-medium max-w-[280px]">
+                        <span className="line-clamp-2" title={k.catalogueKpi.nom}>{k.catalogueKpi.nom}</span>
+                      </TableCell>
+                      <TableCell>
+                        {k.catalogueKpi.categorie
+                          ? (CATEGORIE_LABEL[k.catalogueKpi.categorie] ?? k.catalogueKpi.categorie)
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {k.catalogueKpi.frequence
+                          ? (FREQUENCE_LABEL[k.catalogueKpi.frequence] ?? k.catalogueKpi.frequence)
+                          : '—'}
+                      </TableCell>
                       <TableCell>{k.catalogueKpi.type}</TableCell>
                       <TableCell>{k.cible}</TableCell>
                       <TableCell>{k.catalogueKpi.unite ?? '—'}</TableCell>

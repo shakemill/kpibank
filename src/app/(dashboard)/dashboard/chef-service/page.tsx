@@ -42,6 +42,7 @@ import {
   Building2,
 } from 'lucide-react'
 import { MesKpiPersoSection } from '@/components/dashboard/mes-kpi-perso-section'
+import { getNotationGrille } from '@/lib/notation-grille'
 
 type Periode = { id: number; code: string; statut: string }
 type KpiPersoDetail = { nom: string; cible: number; valeurAgregee: number; tauxAtteinte: number; poids: number }
@@ -73,19 +74,6 @@ type ChefServiceData = {
   }
   contributionDirection: ContributionDir[]
   saisieMoisNonSoumiseChef: boolean
-}
-
-function tauxColor(taux: number): string {
-  if (taux < 70) return 'text-red-600 dark:text-red-400'
-  if (taux < 90) return 'text-orange-600 dark:text-orange-400'
-  if (taux < 100) return 'text-green-600 dark:text-green-400'
-  return 'text-blue-600 dark:text-blue-400'
-}
-function progressBarClass(taux: number): string {
-  if (taux < 70) return '[&_[data-slot=progress-indicator]]:!bg-red-500'
-  if (taux < 90) return '[&_[data-slot=progress-indicator]]:!bg-orange-500'
-  if (taux < 100) return '[&_[data-slot=progress-indicator]]:!bg-green-500'
-  return '[&_[data-slot=progress-indicator]]:!bg-blue-500'
 }
 
 export default function DashboardChefServicePage() {
@@ -143,7 +131,7 @@ export default function DashboardChefServicePage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Tableau de bord Chef de service</h1>
+        <h1 className="text-2xl font-bold">Tableau de bord Chef département / Chef d&apos;agence</h1>
         <Card>
           <CardContent className="pt-6">
             <p className="text-destructive">{error}</p>
@@ -157,7 +145,7 @@ export default function DashboardChefServicePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Tableau de bord Chef de service</h1>
+          <h1 className="text-2xl font-bold">Tableau de bord Chef département / Chef d&apos;agence</h1>
           <p className="text-muted-foreground">Mes KPI personnels, mon service et mon équipe.</p>
         </div>
         {mounted && (
@@ -278,11 +266,11 @@ export default function DashboardChefServicePage() {
                           <TableCell className="font-medium">{k.nom}</TableCell>
                           <TableCell className="text-right">{k.cible}{k.unite ? ` ${k.unite}` : ''}</TableCell>
                           <TableCell className="text-right">{k.realise.toFixed(2)}{k.unite ? ` ${k.unite}` : ''}</TableCell>
-                          <TableCell className={`text-right font-medium ${tauxColor(k.taux)}`}>
+                          <TableCell className={`text-right ${getNotationGrille(k.taux).textClassName}`}>
                             {k.taux.toFixed(0)} %
                           </TableCell>
                           <TableCell>
-                            <Progress value={Math.min(120, k.taux)} className={`h-2 ${progressBarClass(k.taux)}`} />
+                            <Progress value={Math.min(120, k.taux)} className={`h-2 ${getNotationGrille(k.taux).progressClassName}`} />
                           </TableCell>
                         </TableRow>
                       ))}

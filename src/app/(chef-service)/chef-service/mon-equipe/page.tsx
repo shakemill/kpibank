@@ -83,8 +83,10 @@ const STATUT_SAISIE_MAP: Record<string, { label: string; className: string }> = 
   NON_OUVERTE: { label: 'Non ouverte', className: 'bg-muted text-muted-foreground' },
 }
 
+import { libellerRole } from '@/lib/role-labels'
+
 const ROLE_MAP: Record<string, string> = {
-  CHEF_SERVICE: 'Chef de service',
+  CHEF_SERVICE: libellerRole('CHEF_SERVICE'),
   MANAGER: 'Manager',
   EMPLOYE: 'Employé',
 }

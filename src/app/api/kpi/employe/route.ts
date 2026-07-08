@@ -4,8 +4,20 @@ import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { calculerPoidsRestantEmploye } from '@/lib/kpi-utils'
 import { kpiEmployeCreateSchema } from '@/lib/validations/kpi'
-import { notifierKpiAssigne } from '@/lib/notifications'
 import { peutAssignerA, getCollaborateursAssignables } from '@/lib/assignation-rules'
+import {
+  isCatalogueKpiAllowedForDirection,
+  resolveUserDirectionId,
+} from '@/lib/user-direction'
+import {
+  enrichirRealisationsKpi,
+  enrichirRealisationsParMois,
+  calculerScoreParMois,
+  labelMoisPeriode,
+  listerMoisPeriode,
+  moisReferenceDansPeriode,
+} from '@/lib/kpi-realisations'
+import { consolidateEmploye } from '@/lib/consolidation'
 
 const MANAGER_ROLES = ['MANAGER', 'DG', 'DIRECTEUR', 'CHEF_SERVICE']
 
@@ -125,7 +137,63 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { id: 'asc' },
     })
-    return NextResponse.json({ list })
+
+    if (!where.periodeId || list.length === 0) {
+      return NextResponse.json({ list, realisationsMois: null })
+    }
+
+    const periode = await prisma.periode.findUnique({
+      where: { id: where.periodeId },
+      select: { mois_debut: true, mois_fin: true, annee: true },
+    })
+    if (!periode) {
+      return NextResponse.json({ list, realisationsMois: null })
+    }
+
+    const moisCourant = moisReferenceDansPeriode(periode)
+    const saisies = await prisma.saisieMensuelle.findMany({
+      where: {
+        employeId: targetEmployeId,
+        annee: periode.annee,
+        mois: { gte: periode.mois_debut, lte: periode.mois_fin },
+      },
+      select: {
+        kpiEmployeId: true,
+        mois: true,
+        valeur_realisee: true,
+        valeur_ajustee: true,
+        statut: true,
+      },
+    })
+
+    const listEnrichie = enrichirRealisationsKpi(list, saisies, periode, moisCourant)
+    const listAvecMois = enrichirRealisationsParMois(listEnrichie, saisies, periode)
+    const moisPeriode = listerMoisPeriode(periode)
+    const scoreParMois = calculerScoreParMois(list, saisies, periode)
+
+    let scoreGlobal: number | null = null
+    try {
+      const consolidation = await consolidateEmploye(targetEmployeId, where.periodeId!, {
+        includeSoumises: true,
+      })
+      scoreGlobal = Math.round(consolidation.scoreGlobal * 100) / 100
+    } catch {
+      scoreGlobal = null
+    }
+
+    return NextResponse.json({
+      list: listAvecMois,
+      realisationsMois: {
+        mois: moisCourant,
+        annee: periode.annee,
+        label: labelMoisPeriode(periode, moisCourant),
+      },
+      performance: {
+        scoreGlobal,
+        scoreParMois,
+        moisPeriode,
+      },
+    })
   } catch (e) {
     return NextResponse.json(
       { error: 'Erreur serveur', details: e instanceof Error ? e.message : e },
@@ -157,26 +225,42 @@ export async function POST(request: NextRequest) {
   if (Number.isNaN(assignateurId)) {
     return NextResponse.json({ error: 'Session invalide' }, { status: 401 })
   }
-  const employe = await prisma.user.findUnique({
-    where: { id: parsed.data.employeId },
-    select: { id: true, managerId: true, serviceId: true, directionId: true, role: true },
-  })
-  if (!employe) {
-    return NextResponse.json({ error: 'Destinataire introuvable' }, { status: 404 })
+  const assignateur = {
+    id: assignateurId,
+    role: user.role ?? '',
+    serviceId: user.serviceId ?? null,
+    directionId: user.directionId ?? null,
   }
-  const autorise = await peutAssignerA(
-    {
-      id: assignateurId,
-      role: user.role ?? '',
-      serviceId: user.serviceId ?? null,
-      directionId: user.directionId ?? null,
-    },
-    parsed.data.employeId
-  )
+  const autorise = await peutAssignerA(assignateur, parsed.data.employeId)
   if (!autorise) {
     return NextResponse.json(
       { error: "Vous n'êtes pas autorisé à assigner des KPI à cet utilisateur" },
       { status: 403 }
+    )
+  }
+
+  const [employe, poidsRestant] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: parsed.data.employeId },
+      select: {
+        id: true,
+        managerId: true,
+        serviceId: true,
+        directionId: true,
+        role: true,
+        service: { select: { directionId: true } },
+      },
+    }),
+    calculerPoidsRestantEmploye(parsed.data.employeId, parsed.data.periodeId),
+  ])
+  if (!employe) {
+    return NextResponse.json({ error: 'Destinataire introuvable' }, { status: 404 })
+  }
+  const employeDirectionId = resolveUserDirectionId(employe)
+  if (employeDirectionId == null) {
+    return NextResponse.json(
+      { error: "L'utilisateur doit être rattaché à une direction pour recevoir des KPI" },
+      { status: 400 }
     )
   }
   let catalogueKpiId: number
@@ -192,7 +276,7 @@ export async function POST(request: NextRequest) {
     }
     const kpiAppartientAuDestinataire =
       (employe.serviceId != null && kpiService.serviceId === employe.serviceId) ||
-      (employe.directionId != null && kpiService.service.directionId === employe.directionId)
+      kpiService.service.directionId === employeDirectionId
     if (!kpiAppartientAuDestinataire) {
       return NextResponse.json(
         { error: 'Ce KPI n\'appartient pas au service ou à la direction du destinataire' },
@@ -207,10 +291,23 @@ export async function POST(request: NextRequest) {
     }
     const catalogue = await prisma.catalogueKpi.findUnique({
       where: { id: parsed.data.catalogueKpiId },
-      select: { id: true },
+      select: { id: true, actif: true },
     })
     if (!catalogue) {
       return NextResponse.json({ error: 'Catalogue KPI introuvable' }, { status: 404 })
+    }
+    if (!catalogue.actif) {
+      return NextResponse.json({ error: 'Ce KPI catalogue est inactif' }, { status: 400 })
+    }
+    const allowedForDirection = await isCatalogueKpiAllowedForDirection(
+      employeDirectionId,
+      parsed.data.catalogueKpiId
+    )
+    if (!allowedForDirection) {
+      return NextResponse.json(
+        { error: "Ce KPI n'est pas disponible pour la direction de cet utilisateur" },
+        { status: 403 }
+      )
     }
     catalogueKpiId = parsed.data.catalogueKpiId
     if (parsed.data.kpiServiceId != null) {
@@ -222,10 +319,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const poidsRestant = await calculerPoidsRestantEmploye(
-    parsed.data.employeId,
-    parsed.data.periodeId
-  )
   if (parsed.data.poids > poidsRestant) {
     return NextResponse.json(
       { error: 'La somme des poids dépasserait 100%', poidsRestant },
@@ -252,15 +345,7 @@ export async function POST(request: NextRequest) {
         assignePar: { select: { id: true, nom: true, prenom: true } },
       },
     })
-    const assignateurNom = `${kpi.assignePar.prenom} ${kpi.assignePar.nom}`.trim() || 'Votre N+1'
-    await notifierKpiAssigne(
-      kpi.employeId,
-      assignateurNom,
-      user.role ?? '',
-      kpi.catalogueKpi.nom,
-      kpi.periode.code
-    )
-    const newRestant = await calculerPoidsRestantEmploye(parsed.data.employeId, parsed.data.periodeId)
+    const newRestant = Math.max(0, poidsRestant - parsed.data.poids)
     return NextResponse.json({ ...kpi, poidsRestant: Math.round(newRestant * 100) / 100 })
   } catch (e) {
     return NextResponse.json(

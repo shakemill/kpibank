@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast } from '@/hooks/use-toast'
 import {
   Card,
@@ -22,10 +23,12 @@ import {
 } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { GrilleReference } from '@/components/notation/GrilleReference'
+import { useNotationGrille } from '@/contexts/notation-grille-context'
+import { cn } from '@/lib/utils'
 import {
   AlertTriangle,
   BarChart3,
-  BookOpen,
   Calendar,
   CalendarX,
   CheckCircle2,
@@ -43,7 +46,7 @@ import {
   TrendingUp,
   XCircle,
 } from 'lucide-react'
-import { calculerTauxAtteinte, getStatutSaisie, type TypeKpi } from '@/lib/saisie-utils'
+import { calculerTauxAtteinte, getStatutSaisie, isSaisieModifiable, libellerRealisePeriode, type ModeAgregation, type SensCalculKpi, type TypeKpi } from '@/lib/saisie-utils'
 
 const MOIS_LABELS: Record<number, string> = {
   1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril', 5: 'Mai', 6: 'Juin',
@@ -57,33 +60,148 @@ const NIVEAUX_COMPORTEMENTAL = [
   { value: 4, label: 'Expert', desc: 'Peut former les autres' },
 ] as const
 
+type KpiTypeKey = 'QUANTITATIF' | 'QUALITATIF' | 'COMPORTEMENTAL'
+
+const KPI_TYPE_THEME: Record<
+  KpiTypeKey,
+  {
+    card: string
+    header: string
+    icon: string
+    badge: string
+    saisie: string
+    taux: string
+    preview: string
+    blocks: { cible: string; cumul: string; attendu: string }
+    label: { cible: string; cumul: string; attendu: string }
+  }
+> = {
+  QUANTITATIF: {
+    card: 'border border-border/60 bg-card',
+    header: 'border-b border-border/50 bg-muted/20',
+    icon: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    badge: 'bg-muted text-muted-foreground border-border/60',
+    saisie: 'rounded-lg border border-border/60 bg-muted/10 p-3',
+    taux: 'rounded-lg border border-border/50 bg-muted/15 p-2',
+    preview: 'rounded-md border border-border/50 bg-muted/10 px-2 py-1.5 text-xs',
+    blocks: {
+      cible: 'rounded-md border border-border/50 bg-muted/15 px-2.5 py-2',
+      cumul: 'rounded-md border border-border/50 bg-muted/15 px-2.5 py-2',
+      attendu: 'rounded-md border border-border/50 bg-muted/15 px-2.5 py-2',
+    },
+    label: {
+      cible: 'text-muted-foreground',
+      cumul: 'text-muted-foreground',
+      attendu: 'text-muted-foreground',
+    },
+  },
+  QUALITATIF: {
+    card: 'border border-border/60 bg-card',
+    header: 'border-b border-border/50 bg-muted/20',
+    icon: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    badge: 'bg-muted text-muted-foreground border-border/60',
+    saisie: 'rounded-lg border border-border/60 bg-muted/10 p-3',
+    taux: 'rounded-lg border border-border/50 bg-muted/15 p-2',
+    preview: 'rounded-md border border-border/50 bg-muted/10 px-2 py-1.5 text-xs',
+    blocks: {
+      cible: 'rounded-md border border-border/50 bg-muted/15 px-2.5 py-2',
+      cumul: 'rounded-md border border-border/50 bg-muted/15 px-2.5 py-2',
+      attendu: 'rounded-md border border-border/50 bg-muted/15 px-2.5 py-2',
+    },
+    label: {
+      cible: 'text-muted-foreground',
+      cumul: 'text-muted-foreground',
+      attendu: 'text-muted-foreground',
+    },
+  },
+  COMPORTEMENTAL: {
+    card: 'border border-border/60 bg-card',
+    header: 'border-b border-border/50 bg-muted/20',
+    icon: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+    badge: 'bg-muted text-muted-foreground border-border/60',
+    saisie: 'rounded-lg border border-border/60 bg-muted/10 p-3',
+    taux: 'rounded-lg border border-border/50 bg-muted/15 p-2',
+    preview: 'rounded-md border border-border/50 bg-muted/10 px-2 py-1.5 text-xs',
+    blocks: {
+      cible: 'rounded-md border border-border/50 bg-muted/15 px-2.5 py-2',
+      cumul: 'rounded-md border border-border/50 bg-muted/15 px-2.5 py-2',
+      attendu: 'rounded-md border border-border/50 bg-muted/15 px-2.5 py-2',
+    },
+    label: {
+      cible: 'text-muted-foreground',
+      cumul: 'text-muted-foreground',
+      attendu: 'text-muted-foreground',
+    },
+  },
+}
+
+function getKpiTheme(type: string) {
+  return KPI_TYPE_THEME[type as KpiTypeKey] ?? KPI_TYPE_THEME.QUANTITATIF
+}
+
 function KpiTypeBadge({ type }: { type: string }) {
+  const theme = getKpiTheme(type)
   if (type === 'QUANTITATIF')
     return (
-      <Badge variant="secondary" className="gap-1 font-normal">
+      <Badge variant="secondary" className={`gap-1 font-normal border ${theme.badge}`}>
         <BarChart3 className="h-3 w-3" />
         Quantitatif
       </Badge>
     )
   if (type === 'QUALITATIF')
     return (
-      <Badge variant="secondary" className="gap-1 font-normal">
+      <Badge variant="secondary" className={`gap-1 font-normal border ${theme.badge}`}>
         <Star className="h-3 w-3" />
         Qualitatif
       </Badge>
     )
   return (
-    <Badge variant="secondary" className="gap-1 font-normal">
+    <Badge variant="secondary" className={`gap-1 font-normal border ${theme.badge}`}>
       <TrendingUp className="h-3 w-3" />
       Comportemental
     </Badge>
   )
 }
 
+const STATUT_PERIODE: Record<string, { label: string; className: string }> = {
+  OUVERTE: { label: 'Ouverte', className: 'bg-green-500/10 text-green-700 dark:text-green-400' },
+  EN_RETARD: { label: 'En retard', className: 'bg-amber-500/10 text-amber-700 dark:text-amber-400' },
+  VERROUILLEE: { label: 'Clôturée', className: 'bg-muted text-muted-foreground' },
+}
+
+const STATUT_SAISIE: Record<string, { label: string; className: string }> = {
+  OUVERTE: { label: 'Ouverte', className: 'bg-muted text-muted-foreground border-border/60' },
+  EN_RETARD: { label: 'En retard', className: 'bg-muted text-muted-foreground border-border/60' },
+  SOUMISE: { label: 'Soumise', className: 'bg-muted text-muted-foreground border-border/60' },
+  VALIDEE: { label: 'Validée', className: 'bg-green-500/8 text-green-700 dark:text-green-400 border-border/60' },
+  REJETEE: { label: 'Rejetée', className: 'bg-red-500/8 text-red-700 dark:text-red-400 border-border/60' },
+  AJUSTEE: { label: 'Ajustée', className: 'bg-green-500/8 text-green-700 dark:text-green-400 border-border/60' },
+}
+
+function KpiCardSkeleton() {
+  return (
+    <Card className="overflow-hidden">
+      <div className="h-1 bg-muted animate-pulse" />
+      <CardHeader className="space-y-3">
+        <div className="h-5 w-2/3 bg-muted rounded animate-pulse" />
+        <div className="h-4 w-1/3 bg-muted rounded animate-pulse" />
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="h-16 bg-muted/50 rounded-lg animate-pulse" />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="h-10 bg-muted rounded animate-pulse" />
+          <div className="h-10 bg-muted rounded animate-pulse" />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 type KpiEmployeItem = {
   id: number
   cible: number
-  catalogueKpi: { id: number; nom: string; type: string; unite: string | null }
+  poids?: number
+  catalogueKpi: { id: number; nom: string; type: string; unite: string | null; sens_calcul?: string | null }
   cible_periode?: number
   mode_agregation?: string
   cible_mensuelle?: number
@@ -113,6 +231,13 @@ type SaisieItem = {
 type FormValues = Record<number, { valeur: string; commentaire: string; preuves: string }>
 
 export default function SaisiePage() {
+  const { getNotation } = useNotationGrille()
+  const searchParams = useSearchParams()
+  const focusKpiIdParam = searchParams.get('kpiEmployeId')
+  const focusKpiId =
+    focusKpiIdParam != null && !Number.isNaN(parseInt(focusKpiIdParam, 10))
+      ? parseInt(focusKpiIdParam, 10)
+      : null
   const now = new Date()
   const [mois, setMois] = useState(now.getMonth() + 1)
   const [annee, setAnnee] = useState(now.getFullYear())
@@ -167,6 +292,25 @@ export default function SaisiePage() {
     fetchData()
   }, [fetchData])
 
+  const sortedKpiEmployes = useMemo(() => {
+    if (focusKpiId == null) return kpiEmployes
+    const focused = kpiEmployes.find((k) => k.id === focusKpiId)
+    if (!focused) return kpiEmployes
+    return [focused, ...kpiEmployes.filter((k) => k.id !== focusKpiId)]
+  }, [kpiEmployes, focusKpiId])
+
+  useEffect(() => {
+    if (!loading && focusKpiId != null) {
+      const timer = setTimeout(() => {
+        document.getElementById(`kpi-saisie-${focusKpiId}`)?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [loading, focusKpiId, sortedKpiEmployes.length])
+
   const periodeOuverteParN1 = periodesOuvertesParN1.some((p) => p.mois === mois && p.annee === annee)
   const saisieModifiable = statutPeriode !== 'VERROUILLEE' || periodeOuverteParN1
 
@@ -210,7 +354,7 @@ export default function SaisiePage() {
   const isCardReadOnly = (kpiEmployeId: number) => {
     if (!saisieModifiable) return true
     const s = saisies.find((x) => x.kpiEmployeId === kpiEmployeId)
-    return s ? ['SOUMISE', 'VALIDEE', 'AJUSTEE'].includes(s.statut) : false
+    return s ? !isSaisieModifiable(s.statut) : false
   }
 
   // Ne considérer que les KPI modifiables pour la soumission
@@ -298,57 +442,88 @@ export default function SaisiePage() {
     fetchData()
   }
 
-  const progressColor = (taux: number) => {
-    if (taux < 70) return 'bg-red-500'
-    if (taux < 90) return 'bg-amber-500'
-    if (taux < 100) return 'bg-green-500'
-    return 'bg-blue-500'
-  }
+  const periodeStatut = STATUT_PERIODE[statutPeriode] ?? { label: statutPeriode, className: '' }
+  const editableCount = kpiToSubmit.length
 
   return (
-    <div className="space-y-8 p-6 max-w-4xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <PenLine className="h-6 w-6" />
+    <div className="space-y-4 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <PenLine className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Saisie des réalisations</h1>
-            <p className="text-muted-foreground mt-0.5 flex items-center gap-1.5">
-              <Calendar className="h-4 w-4" />
+            <h1 className="text-2xl font-bold tracking-tight">Saisie des réalisations</h1>
+            <p className="text-muted-foreground mt-1 flex items-center gap-1.5 text-sm">
+              <Calendar className="h-3.5 w-3.5" />
               {MOIS_LABELS[mois]} {annee}
+              {periode && <span className="text-muted-foreground/60">· {periode.code}</span>}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
-          {!mounted ? (
-            <div className="h-10 w-[220px] rounded-md border border-input bg-background px-3 py-2 text-sm flex items-center">
-              {MOIS_LABELS[mois]} {annee}
-            </div>
-          ) : (
-            <Select
-              value={`${mois}-${annee}`}
-              onValueChange={(v) => {
-                const [m, a] = v.split('-').map(Number)
-                setMois(m)
-                setAnnee(a)
-              }}
-            >
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Mois" />
-              </SelectTrigger>
-              <SelectContent>
-                {moisOptions.map((opt) => (
-                  <SelectItem key={`${opt.mois}-${opt.annee}`} value={`${opt.mois}-${opt.annee}`}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
+        {saisieModifiable && kpiEmployes.length > 0 && !loading && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleSaveDraft} disabled={saving || submitting}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Enregistrer
+            </Button>
+            <Button size="sm" onClick={handleSubmit} disabled={!allFilled || submitting}>
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              Soumettre
+            </Button>
+          </div>
+        )}
       </div>
+
+      <Card className="shadow-sm border-border/60">
+        <CardContent className="py-3 px-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="space-y-1.5 flex-1 min-w-[200px]">
+              <Label className="text-xs text-muted-foreground">Mois de saisie</Label>
+              {!mounted ? (
+                <div className="h-10 w-full sm:w-[220px] rounded-md border border-input bg-muted/30 px-3 flex items-center text-sm">
+                  {MOIS_LABELS[mois]} {annee}
+                </div>
+              ) : (
+                <Select
+                  value={`${mois}-${annee}`}
+                  onValueChange={(v) => {
+                    const [m, a] = v.split('-').map(Number)
+                    setMois(m)
+                    setAnnee(a)
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-[220px]">
+                    <SelectValue placeholder="Mois" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {moisOptions.map((opt) => (
+                      <SelectItem key={`${opt.mois}-${opt.annee}`} value={`${opt.mois}-${opt.annee}`}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              {periode && (
+                <Badge variant="outline" className="font-normal">
+                  {periode.code}
+                </Badge>
+              )}
+              <Badge variant="outline" className={cn('font-normal', periodeStatut.className)}>
+                Période {periodeStatut.label.toLowerCase()}
+              </Badge>
+              {!loading && kpiEmployes.length > 0 && (
+                <Badge variant="secondary" className="font-normal">
+                  {editableCount} KPI modifiable{editableCount > 1 ? 's' : ''}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {statutPeriode === 'EN_RETARD' && !periodeOuverteParN1 && (
         <Alert variant="default" className="border-amber-500/50 bg-amber-500/10">
@@ -375,10 +550,17 @@ export default function SaisiePage() {
         </Alert>
       )}
 
+      <GrilleReference
+        variant="officielle"
+        collapsible
+        defaultOpen={false}
+        description="Grille paramétrée par l'administration — seuils, appréciations et commentaires appliqués à vos saisies"
+      />
+
       {loading ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Chargement des KPI...</p>
+        <div className="space-y-4">
+          <KpiCardSkeleton />
+          <KpiCardSkeleton />
         </div>
       ) : periode == null ? (
         <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed py-16 px-6 text-center">
@@ -409,14 +591,24 @@ export default function SaisiePage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {kpiEmployes.map((k) => {
+        <div className="space-y-3">
+          {focusKpiId != null && sortedKpiEmployes.some((k) => k.id === focusKpiId) && (
+            <p className="text-xs text-muted-foreground">
+              KPI sélectionné mis en avant.
+            </p>
+          )}
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Indicateurs ({kpiEmployes.length})
+          </h2>
+          {sortedKpiEmployes.map((k) => {
             const type = k.catalogueKpi.type as TypeKpi
+            const sensCalcul = (k.catalogueKpi.sens_calcul ?? 'DIRECT') as SensCalculKpi
             const unite = k.catalogueKpi.unite ?? ''
             const cibleCeMois = k.saisie_mois_courant?.cible_ce_mois ?? k.cible_mensuelle ?? k.cible
             const valNum = getValeurNum(k.id)
-            const taux = valNum != null && cibleCeMois > 0
-              ? calculerTauxAtteinte(valNum, cibleCeMois, type)
+            const peutCalculer = valNum != null && (cibleCeMois > 0 || sensCalcul === 'ZERO_DEFAUT')
+            const taux = peutCalculer
+              ? calculerTauxAtteinte(valNum!, cibleCeMois, type, sensCalcul)
               : 0
             const saisie = saisies.find((s) => s.kpiEmployeId === k.id)
             const readOnly = isCardReadOnly(k.id)
@@ -428,23 +620,38 @@ export default function SaisiePage() {
               k.cible_periode != null && k.cible_periode > 0 && cumulSiSaisi != null
                 ? Math.round((cumulSiSaisi / k.cible_periode) * 1000) / 10
                 : null
+            const theme = getKpiTheme(type)
+            const notation = peutCalculer && taux > 0 ? getNotation(taux) : null
+            const statutSaisieBadge = saisie?.statut
+              ? STATUT_SAISIE[saisie.statut]
+              : null
+            const isFocused = focusKpiId === k.id
 
             return (
-              <Card key={k.id} className="border-border/50 overflow-hidden">
-                <CardHeader className="pb-4 pt-6 px-6">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        {type === 'QUANTITATIF' && <BarChart3 className="h-5 w-5" />}
-                        {type === 'QUALITATIF' && <Star className="h-5 w-5" />}
-                        {type === 'COMPORTEMENTAL' && <TrendingUp className="h-5 w-5" />}
+              <Card
+                key={k.id}
+                id={`kpi-saisie-${k.id}`}
+                className={cn(
+                  'overflow-hidden shadow-sm transition-shadow hover:shadow-md',
+                  theme.card,
+                  readOnly && 'opacity-80',
+                  isFocused && 'ring-1 ring-primary/25 shadow-md'
+                )}
+              >
+                <CardHeader className={cn('py-2 px-3', theme.header)}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', theme.icon)}>
+                        {type === 'QUANTITATIF' && <BarChart3 className="h-4 w-4" />}
+                        {type === 'QUALITATIF' && <Star className="h-4 w-4" />}
+                        {type === 'COMPORTEMENTAL' && <TrendingUp className="h-4 w-4" />}
                       </div>
                       <div>
-                        <CardTitle className="text-lg">
+                        <CardTitle className="text-base leading-snug">
                           {k.catalogueKpi.nom}
-                          {unite && <span className="text-muted-foreground font-normal"> ({unite})</span>}
+                          {unite && <span className="text-muted-foreground font-normal text-sm"> ({unite})</span>}
                         </CardTitle>
-                        <CardDescription className="flex items-center gap-1.5 mt-1.5">
+                        <CardDescription className="flex items-center gap-1 mt-0.5 text-xs">
                           <Target className="h-3.5 w-3.5" />
                           Cible du mois : {cibleCeMois != null ? `${Number(cibleCeMois).toFixed(1)}${unite ? ` ${unite}` : ''}` : '—'}
                         </CardDescription>
@@ -452,269 +659,318 @@ export default function SaisiePage() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <KpiTypeBadge type={type} />
-                      {k.poids != null && (
+                      {k.poids != null && k.poids > 0 && (
                         <Badge variant="outline" className="font-normal">
-                          Poids {k.poids}%{k.catalogueKpi.unite ? ` (${k.catalogueKpi.unite})` : ''}
+                          Poids {k.poids}%
                         </Badge>
+                      )}
+                      {statutSaisieBadge && (
+                        <Badge variant="outline" className={cn('text-xs', statutSaisieBadge.className)}>
+                          {statutSaisieBadge.label}
+                        </Badge>
+                      )}
+                      {readOnly && (
+                        <span className="text-[10px] text-muted-foreground">Lecture seule</span>
                       )}
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-6 px-6 pb-6">
-                  {/* CIBLE CE MOIS / RÉALISÉ CUMULÉ / ATTENDU À DATE */}
+                <CardContent className="space-y-2 px-3 pb-3">
                   {(cibleCeMois != null || k.cible_mensuelle != null || k.realise_cumule != null || k.cible_attendue_a_date != null) && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="rounded-lg border bg-muted/30 p-4">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Cible ce mois</p>
-                        <p className="text-lg font-semibold">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div className={theme.blocks.cible}>
+                        <p className={cn('text-[10px] uppercase tracking-wide font-medium', theme.label.cible)}>Cible mois</p>
+                        <p className="text-sm font-semibold tabular-nums leading-tight mt-0.5">
                           {cibleCeMois != null
                             ? `${Number(cibleCeMois).toFixed(1)}${unite ? ` ${unite}` : ''}`
                             : '—'}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">ce mois</p>
                       </div>
-                      <div className="rounded-lg border bg-muted/30 p-4">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Réalisé cumulé</p>
-                        <p className="text-lg font-semibold">
+                      <div className={theme.blocks.cumul}>
+                        <p className={cn('text-[10px] uppercase tracking-wide font-medium', theme.label.cumul)}>
+                          {libellerRealisePeriode((k.mode_agregation ?? 'MOYENNE') as ModeAgregation)}
+                        </p>
+                        <p className="text-sm font-semibold tabular-nums leading-tight mt-0.5">
                           {k.realise_cumule != null ? `${Number(k.realise_cumule).toFixed(1)}${unite ? ` ${unite}` : ''}` : '—'}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {k.historique?.filter((h) => h.valeur != null).length ?? 0} mois saisis
-                        </p>
                       </div>
-                      <div className="rounded-lg border bg-muted/30 p-4">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5">Attendu à date</p>
-                        <p className="text-lg font-semibold">
+                      <div className={theme.blocks.attendu}>
+                        <p className={cn('text-[10px] uppercase tracking-wide font-medium', theme.label.attendu)}>Attendu</p>
+                        <p className="text-sm font-semibold tabular-nums leading-tight mt-0.5">
                           {k.cible_attendue_a_date != null ? `${Number(k.cible_attendue_a_date).toFixed(1)}${unite ? ` ${unite}` : ''}` : '—'}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">à fin du mois</p>
                       </div>
                     </div>
                   )}
 
-                  {/* Cible période + barre progression */}
-                  {k.cible_periode != null && k.periode_code != null && (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">
-                        Cible période complète : {typeof k.cible_periode === 'number' ? k.cible_periode.toFixed(1) : k.cible_periode} {unite && `${unite} `}
-                        ({k.periode_code}
-                        {k.periode_nb_mois != null && ` — ${k.periode_nb_mois} mois`})
-                      </p>
-                      {k.taux_avancement_periode != null && (
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span>Progression période</span>
-                            <span>{Number(k.taux_avancement_periode).toFixed(1)}%</span>
-                          </div>
-                          <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={['h-full rounded-full transition-all', progressColor(k.taux_avancement_periode)].join(' ')}
-                              style={{ width: `${Math.min(100, k.taux_avancement_periode)}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Timeline historique */}
-                  {k.historique != null && k.historique.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground py-1">
-                      {k.historique.map((h) => {
-                        const isCurrent = h.mois === mois
-                        const label = MOIS_LABELS[h.mois]?.slice(0, 3) ?? String(h.mois)
-                        const val = h.valeur != null ? (typeof h.valeur === 'number' ? h.valeur.toFixed(1) : String(h.valeur)) : '?'
-                        return (
-                          <span key={h.mois} className={isCurrent ? 'font-medium text-primary' : ''}>
-                            {isCurrent && '['}
-                            {label}:{val}
-                            {isCurrent && ']'}
-                            {' '}
-                          </span>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {/* Saisie du mois de [Mois Année] */}
-                  <div className="border-t pt-6 mt-2">
-                    <h4 className="text-base font-medium mb-4">
-                      Saisie du mois de {MOIS_LABELS[mois]} {annee}
-                    </h4>
-                  {type === 'QUANTITATIF' && (
-                    <div className="space-y-5">
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm font-medium">
-                          <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          Valeur réalisée
-                        </Label>
-                        <Input
-                          type="number"
-                          step="any"
-                          value={form[k.id]?.valeur ?? ''}
-                          onChange={(e) => setFormKpi(k.id, 'valeur', e.target.value)}
-                          disabled={readOnly}
-                          placeholder="0"
-                          className="max-w-[200px] h-10"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm font-medium">
-                          <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          Commentaire (optionnel)
-                        </Label>
-                        <Textarea
-                          value={form[k.id]?.commentaire ?? ''}
-                          onChange={(e) => setFormKpi(k.id, 'commentaire', e.target.value)}
-                          disabled={readOnly}
-                          placeholder="Commentaire"
-                          rows={2}
-                          className="min-h-[80px]"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm font-medium">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          Preuves (optionnel)
-                        </Label>
-                        <Input
-                          value={form[k.id]?.preuves ?? ''}
-                          onChange={(e) => setFormKpi(k.id, 'preuves', e.target.value)}
-                          disabled={readOnly}
-                          placeholder="Lien ou référence"
-                          className="h-10"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {type === 'QUALITATIF' && (
-                    <div className="space-y-5">
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm font-medium">
-                          <Star className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          Note réalisée (ex: 4.2)
-                        </Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min={0}
-                          max={5}
-                          value={form[k.id]?.valeur ?? ''}
-                          onChange={(e) => setFormKpi(k.id, 'valeur', e.target.value)}
-                          disabled={readOnly}
-                          placeholder="0 à 5"
-                          className="max-w-[120px] h-10"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm font-medium">
-                          <BookOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          Source de la note (obligatoire)
-                        </Label>
-                        <Textarea
-                          value={form[k.id]?.commentaire ?? ''}
-                          onChange={(e) => setFormKpi(k.id, 'commentaire', e.target.value)}
-                          disabled={readOnly}
-                          placeholder="Indiquez la source de la note"
-                          rows={2}
-                          className="min-h-[80px]"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm font-medium">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          Preuves (optionnel)
-                        </Label>
-                        <Input
-                          value={form[k.id]?.preuves ?? ''}
-                          onChange={(e) => setFormKpi(k.id, 'preuves', e.target.value)}
-                          disabled={readOnly}
-                          placeholder="Lien ou référence"
-                          className="h-10"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {type === 'COMPORTEMENTAL' && (
-                    <div className="space-y-5">
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm font-medium">
-                          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          Niveau
-                        </Label>
-                        <Select
-                          value={form[k.id]?.valeur ?? ''}
-                          onValueChange={(v) => setFormKpi(k.id, 'valeur', v)}
-                          disabled={readOnly}
-                        >
-                          <SelectTrigger className="max-w-[320px] h-10">
-                            <SelectValue placeholder="Choisir le niveau" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {NIVEAUX_COMPORTEMENTAL.map((n) => (
-                              <SelectItem key={n.value} value={String(n.value)}>
-                                {n.value} — {n.label} : {n.desc}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2 text-sm font-medium">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          Preuves (obligatoire)
-                        </Label>
-                        <Textarea
-                          value={form[k.id]?.preuves ?? ''}
-                          onChange={(e) => setFormKpi(k.id, 'preuves', e.target.value)}
-                          disabled={readOnly}
-                          placeholder="Justifier le niveau déclaré"
-                          rows={3}
-                          className="min-h-[100px]"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {(type === 'QUANTITATIF' || type === 'QUALITATIF') && (
-                    <>
-                      <div className="space-y-2 rounded-lg bg-muted/50 p-4">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-1.5">
-                            <Target className="h-3.5 w-3.5 text-muted-foreground" />
-                            {valNum != null ? `${taux.toFixed(1)}% de la cible` : '—'}
-                          </span>
-                        </div>
-                        <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={['h-full transition-all rounded-full', progressColor(taux)].join(' ')}
-                            style={{ width: `${Math.min(100, taux)}%` }}
-                          />
-                        </div>
-                      </div>
-                      {valNum != null && cibleCeMois > 0 && (
-                        <div className="rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800 p-4 text-sm">
-                          <p className="font-medium text-blue-800 dark:text-blue-200">
-                            Si je saisis {typeof valNum === 'number' ? valNum.toFixed(1) : valNum} → {taux.toFixed(1)}% de la cible mensuelle
-                          </p>
-                          {k.mode_agregation === 'CUMUL' && cumulSiSaisi != null && k.cible_periode != null && (
-                            <p className="text-muted-foreground mt-0.5">
-                              Cumul serait : {typeof cumulSiSaisi === 'number' ? cumulSiSaisi.toFixed(1) : cumulSiSaisi} / {typeof k.cible_periode === 'number' ? k.cible_periode.toFixed(1) : k.cible_periode} = {pctPeriodeSiSaisi != null ? pctPeriodeSiSaisi.toFixed(1) : '—'}% de la période
+                  {(k.cible_periode != null ||
+                    (k.historique != null && k.historique.length > 0) ||
+                    ((type === 'QUANTITATIF' || type === 'QUALITATIF') && peutCalculer && notation)) && (
+                    <div className={cn('space-y-2', theme.taux)}>
+                      {(k.cible_periode != null || (k.historique != null && k.historique.length > 0)) && (
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                          {k.cible_periode != null && k.periode_code != null && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Cible {k.periode_code}
+                              {k.periode_nb_mois != null && ` (${k.periode_nb_mois} mois)`} :{' '}
+                              <span className="font-medium text-foreground tabular-nums">
+                                {typeof k.cible_periode === 'number' ? k.cible_periode.toFixed(1) : k.cible_periode}
+                                {unite ? ` ${unite}` : ''}
+                              </span>
                             </p>
+                          )}
+                          {k.historique != null && k.historique.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1">
+                              {k.historique.map((h) => {
+                                const isCurrent = h.mois === mois
+                                const label = MOIS_LABELS[h.mois]?.slice(0, 3) ?? String(h.mois)
+                                const val =
+                                  h.valeur != null
+                                    ? typeof h.valeur === 'number'
+                                      ? h.valeur.toFixed(1)
+                                      : String(h.valeur)
+                                    : '—'
+                                return (
+                                  <span
+                                    key={h.mois}
+                                    className={cn(
+                                      'rounded px-1.5 py-0.5 text-[10px] tabular-nums',
+                                      isCurrent
+                                        ? 'bg-primary/10 text-primary font-semibold ring-1 ring-primary/20'
+                                        : 'bg-background/80 text-muted-foreground'
+                                    )}
+                                  >
+                                    {label}:{val}
+                                  </span>
+                                )
+                              })}
+                            </div>
                           )}
                         </div>
                       )}
-                    </>
+
+                      {(() => {
+                        const showPeriode = k.taux_avancement_periode != null
+                        const showMois =
+                          (type === 'QUANTITATIF' || type === 'QUALITATIF') && peutCalculer && notation
+                        const notationPeriode =
+                          showPeriode && k.taux_avancement_periode != null
+                            ? getNotation(k.taux_avancement_periode)
+                            : null
+
+                        const renderMetrique = (
+                          label: string,
+                          valeur: number,
+                          notationMetrique: NonNullable<typeof notation>,
+                          pied?: string
+                        ) => (
+                          <div className="flex min-w-0 flex-col gap-1">
+                            <div className="flex h-4 items-center justify-between gap-2">
+                              <span className="text-[10px] leading-none text-muted-foreground">{label}</span>
+                              <span
+                                className="text-xs font-semibold tabular-nums leading-none"
+                                style={{ color: notationMetrique.chartColor }}
+                              >
+                                {valeur.toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${Math.min(100, valeur)}%`,
+                                  backgroundColor: notationMetrique.chartColor,
+                                }}
+                              />
+                            </div>
+                            <p className="min-h-[14px] text-[10px] leading-tight text-muted-foreground line-clamp-1">
+                              {pied || '\u00A0'}
+                            </p>
+                          </div>
+                        )
+
+                        if (showPeriode && showMois && notation && notationPeriode) {
+                          return (
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-x-3 sm:gap-y-0">
+                              {renderMetrique(
+                                'Progression période',
+                                Number(k.taux_avancement_periode),
+                                notationPeriode,
+                                notationPeriode.commentaire || notationPeriode.appreciation
+                              )}
+                              {renderMetrique(
+                                'Taux mois',
+                                taux,
+                                notation,
+                                notation.appreciation
+                              )}
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div className="grid grid-cols-1 gap-2">
+                            {showPeriode &&
+                              notationPeriode &&
+                              renderMetrique(
+                                'Progression période',
+                                Number(k.taux_avancement_periode),
+                                notationPeriode,
+                                notationPeriode.commentaire || notationPeriode.appreciation
+                              )}
+                            {showMois &&
+                              notation &&
+                              renderMetrique('Taux mois', taux, notation, notation.appreciation)}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  )}
+
+                  <div className={theme.saisie}>
+                    <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5 text-muted-foreground">
+                      <PenLine className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                      Saisie — {MOIS_LABELS[mois]} {annee}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="space-y-1 min-w-0">
+                        {type === 'QUANTITATIF' && (
+                          <>
+                            <Label className="flex items-center gap-1.5 text-xs font-medium">
+                              <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              Valeur réalisée
+                            </Label>
+                            <Input
+                              type="number"
+                              step="any"
+                              value={form[k.id]?.valeur ?? ''}
+                              onChange={(e) => setFormKpi(k.id, 'valeur', e.target.value)}
+                              disabled={readOnly}
+                              placeholder="0"
+                              className="h-9 w-full"
+                            />
+                          </>
+                        )}
+                        {type === 'QUALITATIF' && (
+                          <>
+                            <Label className="flex items-center gap-1.5 text-xs font-medium">
+                              <Star className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              Note réalisée
+                            </Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              min={0}
+                              max={5}
+                              value={form[k.id]?.valeur ?? ''}
+                              onChange={(e) => setFormKpi(k.id, 'valeur', e.target.value)}
+                              disabled={readOnly}
+                              placeholder="0 à 5"
+                              className="h-9 w-full"
+                            />
+                          </>
+                        )}
+                        {type === 'COMPORTEMENTAL' && (
+                          <>
+                            <Label className="flex items-center gap-1.5 text-xs font-medium">
+                              <TrendingUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              Niveau
+                            </Label>
+                            <Select
+                              value={form[k.id]?.valeur ?? ''}
+                              onValueChange={(v) => setFormKpi(k.id, 'valeur', v)}
+                              disabled={readOnly}
+                            >
+                              <SelectTrigger className="h-9 w-full">
+                                <SelectValue placeholder="Choisir le niveau" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {NIVEAUX_COMPORTEMENTAL.map((n) => (
+                                  <SelectItem key={n.value} value={String(n.value)}>
+                                    {n.value} — {n.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="space-y-1 min-w-0">
+                        <Label className="flex items-center gap-1.5 text-xs font-medium">
+                          <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          {type === 'QUALITATIF'
+                            ? 'Source de la note'
+                            : type === 'COMPORTEMENTAL'
+                              ? 'Commentaire (optionnel)'
+                              : 'Commentaire (optionnel)'}
+                          {type === 'QUALITATIF' && (
+                            <span className="text-destructive text-xs font-normal">*</span>
+                          )}
+                        </Label>
+                        <Textarea
+                          value={form[k.id]?.commentaire ?? ''}
+                          onChange={(e) => setFormKpi(k.id, 'commentaire', e.target.value)}
+                          disabled={readOnly}
+                          placeholder={
+                            type === 'QUALITATIF'
+                              ? 'Source de la note'
+                              : 'Commentaire'
+                          }
+                          rows={2}
+                          className="min-h-[36px] text-sm resize-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1 min-w-0">
+                        <Label className="flex items-center gap-1.5 text-xs font-medium">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          {type === 'COMPORTEMENTAL' ? 'Preuves' : 'Preuves (optionnel)'}
+                          {type === 'COMPORTEMENTAL' && (
+                            <span className="text-destructive text-xs font-normal">*</span>
+                          )}
+                        </Label>
+                        {type === 'COMPORTEMENTAL' ? (
+                          <Textarea
+                            value={form[k.id]?.preuves ?? ''}
+                            onChange={(e) => setFormKpi(k.id, 'preuves', e.target.value)}
+                            disabled={readOnly}
+                            placeholder="Justifier le niveau déclaré"
+                            rows={2}
+                            className="min-h-[40px] text-sm resize-none"
+                          />
+                        ) : (
+                          <Input
+                            value={form[k.id]?.preuves ?? ''}
+                            onChange={(e) => setFormKpi(k.id, 'preuves', e.target.value)}
+                            disabled={readOnly}
+                            placeholder="Lien ou référence"
+                            className="h-9 w-full"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {(type === 'QUANTITATIF' || type === 'QUALITATIF') && valNum != null && cibleCeMois > 0 && (
+                    <div className={cn(theme.preview)}>
+                      <p className="font-medium leading-snug">
+                        Si je saisis {typeof valNum === 'number' ? valNum.toFixed(1) : valNum} → {taux.toFixed(1)}% de la cible mensuelle
+                      </p>
+                      {k.mode_agregation === 'CUMUL' && cumulSiSaisi != null && k.cible_periode != null && (
+                        <p className="text-muted-foreground mt-0.5">
+                          Cumul serait : {typeof cumulSiSaisi === 'number' ? cumulSiSaisi.toFixed(1) : cumulSiSaisi} / {typeof k.cible_periode === 'number' ? k.cible_periode.toFixed(1) : k.cible_periode} = {pctPeriodeSiSaisi != null ? pctPeriodeSiSaisi.toFixed(1) : '—'}% de la période
+                        </p>
+                      )}
+                    </div>
                   )}
 
                   {saisie && ['SOUMISE', 'VALIDEE', 'AJUSTEE', 'REJETEE'].includes(saisie.statut) && (
-                    <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-4 py-3 text-sm mt-2">
-                      {saisie.statut === 'VALIDEE' && <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />}
-                      {saisie.statut === 'AJUSTEE' && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />}
-                      {saisie.statut === 'SOUMISE' && <Loader2 className="h-4 w-4 animate-spin text-amber-600 shrink-0" />}
-                      {saisie.statut === 'REJETEE' && <XCircle className="h-4 w-4 text-destructive shrink-0" />}
+                    <div className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1 text-[11px]">
+                      {saisie.statut === 'VALIDEE' && <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />}
+                      {saisie.statut === 'AJUSTEE' && <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />}
+                      {saisie.statut === 'SOUMISE' && <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600 shrink-0" />}
+                      {saisie.statut === 'REJETEE' && <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
                       <span className="text-muted-foreground">
                         Statut : {saisie.statut === 'VALIDEE' && 'Validée'}
                         {saisie.statut === 'AJUSTEE' && 'Ajustée'}
@@ -723,7 +979,6 @@ export default function SaisiePage() {
                       </span>
                     </div>
                   )}
-                  </div>
                 </CardContent>
               </Card>
             )
@@ -732,19 +987,17 @@ export default function SaisiePage() {
       )}
 
       {!loading && kpiEmployes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-5">
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
           <Button
             variant="outline"
-            size="default"
             onClick={handleSaveDraft}
-            disabled={!saisieModifiable || saving}
+            disabled={!saisieModifiable || saving || submitting}
             className="gap-2"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Enregistrer brouillon
           </Button>
           <Button
-            size="default"
             onClick={handleSubmit}
             disabled={!allFilled || !saisieModifiable || submitting}
             className="gap-2"

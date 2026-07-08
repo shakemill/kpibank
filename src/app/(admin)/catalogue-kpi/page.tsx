@@ -64,14 +64,28 @@ import {
   PaginationPrevious,
 } from '@/components/ui/pagination'
 import { Target, Plus, Edit, Ban, CheckCircle, Search, ListChecks, BarChart3, Star, TrendingUp, ArrowLeft, ArrowUp, ArrowDown } from 'lucide-react'
+import {
+  formaterNomKpiAffichage,
+  kpiCorrespondRecherche,
+  libellerFrequenceKpi,
+  modeAgregationDepuisFrequence,
+  FREQUENCE_KPI_LABELS,
+  type FrequenceKpi,
+} from '@/lib/kpi-cible-utils'
+import { PORTEE_KPI_OPTIONS, libellerPorteeKpi } from '@/lib/portee-kpi-labels'
 
 type CatalogueRow = {
   id: number
+  code: string | null
   nom: string
   description: string | null
+  objectif_qualite: string | null
   type: string
+  frequence: string | null
+  categorie: string | null
   unite: string | null
   mode_agregation: string
+  portee?: string
   actif: boolean
 }
 
@@ -99,16 +113,31 @@ const MODE_CONFIG: Record<string, { label: string; className: string }> = {
   DERNIER: { label: 'Dernier', className: 'bg-orange-500/10 text-orange-700 dark:text-orange-400' },
 }
 
+const FREQUENCE_CONFIG: Record<string, { label: string; className: string }> = {
+  MENSUELLE: { label: 'Mensuelle', className: 'bg-sky-500/10 text-sky-700 dark:text-sky-400' },
+  TRIMESTRIELLE: { label: 'Trimestrielle', className: 'bg-violet-500/10 text-violet-700 dark:text-violet-400' },
+  SEMESTRIELLE: { label: 'Semestrielle', className: 'bg-amber-500/10 text-amber-700 dark:text-amber-400' },
+  ANNUELLE: { label: 'Annuelle', className: 'bg-rose-500/10 text-rose-700 dark:text-rose-400' },
+  EVENEMENTIELLE: { label: 'Événementielle', className: 'bg-stone-500/10 text-stone-700 dark:text-stone-400' },
+}
+
+const FREQUENCE_OPTIONS = (Object.entries(FREQUENCE_KPI_LABELS) as [FrequenceKpi, string][]).map(
+  ([value, label]) => ({ value, label })
+)
+
+const FREQUENCE_FILTER_OPTIONS = FREQUENCE_OPTIONS
+
 export default function CatalogueKpiPage() {
   const [list, setList] = useState<CatalogueRow[]>([])
   const [loading, setLoading] = useState(true)
   const [actifFilter, setActifFilter] = useState<string>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [frequenceFilter, setFrequenceFilter] = useState<string>('all')
   const [uniteFilter, setUniteFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  type SortColumn = 'nom' | 'type' | 'unite' | 'mode_agregation'
+  type SortColumn = 'nom' | 'type' | 'frequence' | 'unite' | 'mode_agregation'
   const [sortBy, setSortBy] = useState<SortColumn>('nom')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
 
@@ -128,8 +157,10 @@ export default function CatalogueKpiPage() {
   const [formNom, setFormNom] = useState('')
   const [formDescription, setFormDescription] = useState('')
   const [formType, setFormType] = useState<string>('QUANTITATIF')
+  const [formFrequence, setFormFrequence] = useState<string>('MENSUELLE')
   const [formUnite, setFormUnite] = useState('')
-  const [formMode, setFormMode] = useState<string>('CUMUL')
+  const [formMode, setFormMode] = useState<string>('MOYENNE')
+  const [formPortee, setFormPortee] = useState<string>('INDIVIDUEL')
   const [formActif, setFormActif] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -159,8 +190,10 @@ export default function CatalogueKpiPage() {
     setFormNom('')
     setFormDescription('')
     setFormType('QUANTITATIF')
+    setFormFrequence('MENSUELLE')
     setFormUnite('')
-    setFormMode('CUMUL')
+    setFormMode('MOYENNE')
+    setFormPortee('INDIVIDUEL')
     setFormActif(true)
     setModalOpen(true)
   }
@@ -170,10 +203,17 @@ export default function CatalogueKpiPage() {
     setFormNom(row.nom)
     setFormDescription(row.description ?? '')
     setFormType(row.type)
+    setFormFrequence(row.frequence ?? 'MENSUELLE')
     setFormUnite(row.unite ?? '')
     setFormMode(row.mode_agregation)
+    setFormPortee(row.portee ?? 'INDIVIDUEL')
     setFormActif(row.actif)
     setModalOpen(true)
+  }
+
+  const handleFrequenceChange = (value: string) => {
+    setFormFrequence(value)
+    setFormMode(modeAgregationDepuisFrequence(value as FrequenceKpi))
   }
 
   const handleSubmit = async () => {
@@ -192,8 +232,10 @@ export default function CatalogueKpiPage() {
             nom,
             description: formDescription.trim() || null,
             type: formType,
+            frequence: formFrequence,
             unite: formUnite.trim() || null,
             mode_agregation: formMode,
+            portee: formPortee,
             actif: formActif,
           }),
         })
@@ -211,8 +253,10 @@ export default function CatalogueKpiPage() {
             nom,
             description: formDescription.trim() || null,
             type: formType,
+            frequence: formFrequence,
             unite: formUnite.trim() || null,
             mode_agregation: formMode,
+            portee: formPortee,
             actif: formActif,
           }),
         })
@@ -273,13 +317,13 @@ export default function CatalogueKpiPage() {
   const filteredList = useMemo(() => {
     let items = list
     if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase()
-      items = items.filter((r) => r.nom.toLowerCase().includes(q))
+      items = items.filter((r) => kpiCorrespondRecherche(r, searchQuery))
     }
     if (typeFilter !== 'all') items = items.filter((r) => r.type === typeFilter)
+    if (frequenceFilter !== 'all') items = items.filter((r) => r.frequence === frequenceFilter)
     if (uniteFilter !== 'all') items = items.filter((r) => (r.unite?.trim() ?? '') === uniteFilter)
     return items
-  }, [list, searchQuery, typeFilter, uniteFilter])
+  }, [list, searchQuery, typeFilter, frequenceFilter, uniteFilter])
 
   const sortedList = useMemo(() => {
     return [...filteredList].sort((a, b) => {
@@ -290,6 +334,9 @@ export default function CatalogueKpiPage() {
           break
         case 'type':
           cmp = (a.type ?? '').localeCompare(b.type ?? '', undefined, { sensitivity: 'base' })
+          break
+        case 'frequence':
+          cmp = (a.frequence ?? '').localeCompare(b.frequence ?? '', undefined, { sensitivity: 'base' })
           break
         case 'unite':
           cmp = (a.unite ?? '').localeCompare(b.unite ?? '', undefined, { sensitivity: 'base' })
@@ -307,6 +354,10 @@ export default function CatalogueKpiPage() {
   const totalFiltered = sortedList.length
   const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize))
   const currentPage = Math.min(page, totalPages)
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
   const paginatedList = useMemo(
     () => sortedList.slice((currentPage - 1) * pageSize, currentPage * pageSize),
     [sortedList, currentPage, pageSize]
@@ -314,11 +365,11 @@ export default function CatalogueKpiPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [searchQuery, typeFilter, uniteFilter, actifFilter])
+  }, [searchQuery, typeFilter, frequenceFilter, uniteFilter, actifFilter])
 
   return (
     <TooltipProvider>
-    <div className="space-y-6 p-6">
+    <div className="min-w-0 max-w-full space-y-6">
       <div className="flex flex-col gap-3">
         <Button variant="ghost" size="sm" className="w-fit gap-2 -ml-2" asChild>
           <Link href="/dashboard/admin" title="Retour à l&apos;administration">
@@ -339,10 +390,10 @@ export default function CatalogueKpiPage() {
         </div>
       </div>
 
-      <Card className="border-border/50 shadow-sm">
+      <Card className="border-border/50 shadow-sm min-w-0 overflow-hidden">
         <CardHeader className="pb-4">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-row items-start justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                   <Target className="h-5 w-5 text-primary" />
@@ -358,17 +409,17 @@ export default function CatalogueKpiPage() {
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 sm:flex-initial sm:w-52">
+              <div className="relative w-full sm:w-52 sm:flex-initial">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Filtrer par nom"
+                  placeholder="Filtrer par nom ou code"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9"
+                  className="pl-9 h-9 w-full"
                 />
               </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[140px] h-9">
+                <SelectTrigger className="w-full sm:w-[140px] h-9">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -378,8 +429,19 @@ export default function CatalogueKpiPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={frequenceFilter} onValueChange={setFrequenceFilter}>
+                <SelectTrigger className="w-full sm:w-[150px] h-9">
+                  <SelectValue placeholder="Fréquence" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes fréquences</SelectItem>
+                  {FREQUENCE_FILTER_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select value={uniteFilter} onValueChange={setUniteFilter}>
-                <SelectTrigger className="w-[140px] h-9">
+                <SelectTrigger className="w-full sm:w-[130px] h-9">
                   <SelectValue placeholder="Unité" />
                 </SelectTrigger>
                 <SelectContent>
@@ -390,7 +452,7 @@ export default function CatalogueKpiPage() {
                 </SelectContent>
               </Select>
               <Select value={actifFilter} onValueChange={setActifFilter}>
-                <SelectTrigger className="w-[130px] h-9">
+                <SelectTrigger className="w-full sm:w-[120px] h-9">
                   <SelectValue placeholder="Statut" />
                 </SelectTrigger>
                 <SelectContent>
@@ -402,15 +464,18 @@ export default function CatalogueKpiPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0 p-0 sm:px-6 sm:pb-6">
           {loading ? (
-            <TableSkeleton rows={6} cols={7} />
+            <div className="p-6">
+              <TableSkeleton rows={6} cols={9} />
+            </div>
           ) : (
             <>
-              <Table>
+              <Table className="table-fixed min-w-[720px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
+                    <TableHead className="w-[100px] hidden md:table-cell">Code</TableHead>
+                    <TableHead className="w-[min(280px,35%)]">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -427,12 +492,12 @@ export default function CatalogueKpiPage() {
                         ) : null}
                       </Button>
                     </TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>
+                    <TableHead className="hidden lg:table-cell w-[180px]">Description</TableHead>
+                    <TableHead className="w-[100px]">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="-ml-3 h-8 gap-1.5 font-medium hover:bg-muted/50"
+                        className="-ml-3 h-8 gap-1 font-medium hover:bg-muted/50"
                         onClick={() => handleSort('type')}
                       >
                         Type
@@ -445,11 +510,28 @@ export default function CatalogueKpiPage() {
                         ) : null}
                       </Button>
                     </TableHead>
-                    <TableHead>
+                    <TableHead className="w-[108px] hidden sm:table-cell">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="-ml-3 h-8 gap-1.5 font-medium hover:bg-muted/50"
+                        className="-ml-3 h-8 gap-1 font-medium hover:bg-muted/50 px-1"
+                        onClick={() => handleSort('frequence')}
+                      >
+                        Fréquence
+                        {sortBy === 'frequence' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          )
+                        ) : null}
+                      </Button>
+                    </TableHead>
+                    <TableHead className="w-[72px]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8 gap-1 font-medium hover:bg-muted/50"
                         onClick={() => handleSort('unite')}
                       >
                         Unité
@@ -462,14 +544,15 @@ export default function CatalogueKpiPage() {
                         ) : null}
                       </Button>
                     </TableHead>
-                    <TableHead>
+                    <TableHead className="w-[88px]">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="-ml-3 h-8 gap-1.5 font-medium hover:bg-muted/50"
+                        className="-ml-3 h-8 gap-1 font-medium hover:bg-muted/50 px-1"
                         onClick={() => handleSort('mode_agregation')}
                       >
-                        Mode agrégation
+                        <span className="hidden sm:inline">Agrégation</span>
+                        <span className="sm:hidden">Agrég.</span>
                         {sortBy === 'mode_agregation' ? (
                           sortOrder === 'asc' ? (
                             <ArrowUp className="h-3.5 w-3.5 text-muted-foreground" />
@@ -479,28 +562,76 @@ export default function CatalogueKpiPage() {
                         ) : null}
                       </Button>
                     </TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead className="w-[120px]">Actions</TableHead>
+                    <TableHead className="w-[52px]">Statut</TableHead>
+                    <TableHead className="w-[88px] sticky right-0 bg-card z-10 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedList.map((row) => {
                     const typeCfg = TYPE_CONFIG[row.type] ?? { label: row.type, className: '', Icon: Target }
+                    const freqCfg = row.frequence
+                      ? (FREQUENCE_CONFIG[row.frequence] ?? {
+                          label: libellerFrequenceKpi(row.frequence),
+                          className: '',
+                        })
+                      : null
                     const modeCfg = MODE_CONFIG[row.mode_agregation] ?? { label: row.mode_agregation, className: '' }
                     return (
                       <TableRow key={row.id} className="group hover:bg-muted/50 transition-colors">
-                        <TableCell className="font-medium">{row.nom}</TableCell>
-                        <TableCell className="max-w-[220px] truncate text-muted-foreground" title={row.description ?? undefined}>
-                          {row.description?.trim() || '—'}
+                        <TableCell className="hidden md:table-cell whitespace-normal">
+                          {row.code ? (
+                            <Badge variant="outline" className="font-mono text-xs font-normal truncate max-w-full">
+                              {row.code}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={`gap-1 border ${typeCfg.className}`}>
-                            <typeCfg.Icon className="h-3 w-3" />
-                            {typeCfg.label}
+                        <TableCell className="whitespace-normal align-top">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <p className="font-medium line-clamp-2 break-words text-sm leading-snug cursor-default">
+                                {formaterNomKpiAffichage(row.nom)}
+                              </p>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-sm text-sm">
+                              <p>{formaterNomKpiAffichage(row.nom)}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell whitespace-normal align-top text-muted-foreground text-sm">
+                          {row.description?.trim() ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <p className="line-clamp-2 break-words cursor-default">
+                                  {row.description.trim()}
+                                </p>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-md text-sm">
+                                <p className="whitespace-pre-wrap">{row.description.trim()}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span>—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="whitespace-normal">
+                          <Badge variant="outline" className={`gap-1 border text-xs font-normal ${typeCfg.className}`}>
+                            <typeCfg.Icon className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{typeCfg.label}</span>
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{row.unite ?? '—'}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell whitespace-normal">
+                          {freqCfg ? (
+                            <Badge variant="outline" className={`text-xs font-normal ${freqCfg.className}`}>
+                              {freqCfg.label}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm whitespace-normal">{row.unite ?? '—'}</TableCell>
+                        <TableCell className="whitespace-normal">
                           <Badge variant="outline" className={`text-xs font-normal ${modeCfg.className}`}>
                             {modeCfg.label}
                           </Badge>
@@ -519,8 +650,8 @@ export default function CatalogueKpiPage() {
                             <TooltipContent>{row.actif ? 'Actif' : 'Inactif'}</TooltipContent>
                           </Tooltip>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
+                        <TableCell className="sticky right-0 bg-card group-hover:bg-muted/50 z-10 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)]">
+                          <div className="flex items-center gap-0.5">
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
@@ -566,7 +697,7 @@ export default function CatalogueKpiPage() {
                 </TableBody>
               </Table>
               {totalFiltered > 0 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 border-t mt-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-4 sm:px-0 border-t mt-0 sm:mt-4">
                   <p className="text-sm text-muted-foreground">
                     {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalFiltered)} sur {totalFiltered}
                   </p>
@@ -621,9 +752,9 @@ export default function CatalogueKpiPage() {
             </>
           )}
           {!loading && totalFiltered === 0 && (() => {
-            const hasFilters = searchQuery || typeFilter !== 'all' || uniteFilter !== 'all' || actifFilter !== 'all'
+            const hasFilters = searchQuery || typeFilter !== 'all' || frequenceFilter !== 'all' || uniteFilter !== 'all' || actifFilter !== 'all'
             return (
-              <div className="flex flex-col items-center justify-center py-16 px-4 text-center border rounded-lg bg-muted/30">
+              <div className="flex flex-col items-center justify-center py-16 px-4 mx-4 sm:mx-6 mb-6 text-center border rounded-lg bg-muted/30">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
                   <ListChecks className="h-8 w-8 text-muted-foreground" />
                 </div>
@@ -648,7 +779,7 @@ export default function CatalogueKpiPage() {
       </Card>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{editRow ? 'Modifier le KPI catalogue' : 'Ajouter un KPI au catalogue'}</DialogTitle>
             <DialogDescription>
@@ -656,6 +787,12 @@ export default function CatalogueKpiPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {editRow?.code ? (
+              <div className="grid gap-2">
+                <Label htmlFor="form-code">Code</Label>
+                <Input id="form-code" value={editRow.code} readOnly disabled className="font-mono text-sm" />
+              </div>
+            ) : null}
             <div className="grid gap-2">
               <Label htmlFor="form-nom">Nom <span className="text-destructive">*</span></Label>
               <Input
@@ -689,6 +826,34 @@ export default function CatalogueKpiPage() {
                 </Select>
               </div>
               <div className="grid gap-2">
+                <Label>Fréquence</Label>
+                <Select value={formFrequence} onValueChange={handleFrequenceChange}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FREQUENCE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Portée</Label>
+              <Select value={formPortee} onValueChange={setFormPortee}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PORTEE_KPI_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
                 <Label htmlFor="form-unite">Unité (optionnel)</Label>
                 <Input
                   id="form-unite"
@@ -697,25 +862,25 @@ export default function CatalogueKpiPage() {
                   placeholder="Ex. M MAD, %, jours, /5"
                 />
               </div>
+              <div className="grid gap-2">
+                <Label>Mode d&apos;agrégation</Label>
+                <Select value={formMode} onValueChange={setFormMode}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value} title={o.desc}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label>Mode d&apos;agrégation</Label>
-              <Select value={formMode} onValueChange={setFormMode}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MODE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value} title={o.desc}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Cumul : somme des mois · Moyenne : moyenne mensuelle · Dernier : valeur du dernier mois
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground -mt-2">
+              Mensuelle → moyenne des mois · Trimestrielle / Semestrielle → valeur du dernier mois de la période
+            </p>
             <div className="flex items-center gap-3 rounded-lg border p-4">
               <Switch id="form-actif" checked={formActif} onCheckedChange={setFormActif} />
               <div>
@@ -737,7 +902,7 @@ export default function CatalogueKpiPage() {
             <AlertDialogTitle>Désactiver ce KPI ?</AlertDialogTitle>
             <AlertDialogDescription>
               {confirmTarget && (
-                <>Le KPI « {confirmTarget.nom} » ne sera plus proposé aux directeurs. Les KPI direction déjà créés restent inchangés.</>
+                <>Le KPI « {formaterNomKpiAffichage(confirmTarget.nom)} » ne sera plus proposé aux directeurs. Les KPI direction déjà créés restent inchangés.</>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -758,7 +923,7 @@ export default function CatalogueKpiPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Activer ce KPI ?</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmTarget && <>Le KPI « {confirmTarget.nom} » sera à nouveau proposé aux directeurs.</>}
+              {confirmTarget && <>Le KPI « {formaterNomKpiAffichage(confirmTarget.nom)} » sera à nouveau proposé aux directeurs.</>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

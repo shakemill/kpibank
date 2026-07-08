@@ -67,15 +67,15 @@ export async function GET(request: NextRequest) {
   const ids = collaborateurs.map((c) => c.id)
   const kpiByEmploye = await prisma.kpiEmploye.findMany({
     where: { employeId: { in: ids }, periodeId },
-    select: { employeId: true, poids: true, statut: true },
+    select: { employeId: true, poids: true, statut: true, kpiServiceId: true },
   })
 
   const byEmploye = new Map<
     number,
-    { sommePoids: number; nbKpi: number; statuts: Set<string> }
+    { sommePoids: number; nbKpi: number; statuts: Set<string>; gestionParPoids: boolean }
   >()
   for (const c of collaborateurs) {
-    byEmploye.set(c.id, { sommePoids: 0, nbKpi: 0, statuts: new Set() })
+    byEmploye.set(c.id, { sommePoids: 0, nbKpi: 0, statuts: new Set(), gestionParPoids: false })
   }
   for (const k of kpiByEmploye) {
     const rec = byEmploye.get(k.employeId)
@@ -83,16 +83,25 @@ export async function GET(request: NextRequest) {
       rec.sommePoids += k.poids
       rec.nbKpi += 1
       rec.statuts.add(k.statut)
+      if (k.kpiServiceId != null) rec.gestionParPoids = true
     }
   }
 
   type StatutGlobal = 'OK' | 'CONTESTATIONS' | 'EN_ATTENTE' | 'INCOMPLET'
-  function statutGlobal(statuts: Set<string>, sommePoids: number): StatutGlobal {
+  function statutGlobal(
+    statuts: Set<string>,
+    sommePoids: number,
+    nbKpi: number,
+    gestionParPoids: boolean
+  ): StatutGlobal {
+    if (nbKpi === 0) return 'INCOMPLET'
     if (statuts.has('CONTESTE')) return 'CONTESTATIONS'
     if (statuts.has('NOTIFIE') || statuts.has('DRAFT')) return 'EN_ATTENTE'
-    const tousValides =
-      statuts.size === 1 && (statuts.has('VALIDE') || statuts.has('CLOTURE'))
-    const poidsOk = Math.abs(sommePoids - 100) < 0.01
+    if (statuts.has('ACCEPTE') || statuts.has('MAINTENU') || statuts.has('REVISE')) {
+      return 'EN_ATTENTE'
+    }
+    const tousValides = [...statuts].every((s) => s === 'VALIDE' || s === 'CLOTURE')
+    const poidsOk = !gestionParPoids || Math.abs(sommePoids - 100) < 0.01
     if (tousValides && poidsOk) return 'OK'
     return 'INCOMPLET'
   }
@@ -102,7 +111,9 @@ export async function GET(request: NextRequest) {
       sommePoids: 0,
       nbKpi: 0,
       statuts: new Set<string>(),
+      gestionParPoids: false,
     }
+    const poidsOk = !rec.gestionParPoids || Math.abs(rec.sommePoids - 100) < 0.01
     return {
       id: c.id,
       nom: c.nom,
@@ -116,8 +127,9 @@ export async function GET(request: NextRequest) {
       manager: c.manager ? { id: c.manager.id, nom: c.manager.nom, prenom: c.manager.prenom } : null,
       nbKpiAssignes: rec.nbKpi,
       sommePoids: Math.round(rec.sommePoids * 100) / 100,
-      poidsOk: Math.abs(rec.sommePoids - 100) < 0.01,
-      statutGlobal: statutGlobal(rec.statuts, rec.sommePoids),
+      gestionParPoids: rec.gestionParPoids,
+      poidsOk,
+      statutGlobal: statutGlobal(rec.statuts, rec.sommePoids, rec.nbKpi, rec.gestionParPoids),
     }
   })
 

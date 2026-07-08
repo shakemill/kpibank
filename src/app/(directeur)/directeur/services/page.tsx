@@ -29,6 +29,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Building2, Users, Target, ExternalLink, BarChart3 } from 'lucide-react'
+import { getNotationGrille } from '@/lib/notation-grille'
 import {
   BarChart,
   Bar,
@@ -141,8 +142,7 @@ export default function DirecteurServicesPage() {
   const chartData = services.map((s) => ({
     name: s.nom,
     taux: Math.round(s.tauxAtteinte * 10) / 10,
-    fill:
-      s.tauxAtteinte >= 90 ? '#22c55e' : s.tauxAtteinte >= 70 ? '#f97316' : '#ef4444',
+    fill: getNotationGrille(s.tauxAtteinte).chartColor,
   }))
 
   return (
@@ -249,15 +249,7 @@ export default function DirecteurServicesPage() {
                 <CardContent className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Taux atteinte</span>
-                    <span
-                      className={
-                        svc.tauxAtteinte >= 90
-                          ? 'text-green-600 font-medium'
-                          : svc.tauxAtteinte >= 70
-                            ? 'text-orange-600'
-                            : 'text-red-600'
-                      }
-                    >
+                    <span className={getNotationGrille(svc.tauxAtteinte).textClassName}>
                       {svc.tauxAtteinte.toFixed(1)}%
                     </span>
                   </div>
@@ -291,7 +283,7 @@ export default function DirecteurServicesPage() {
                   Comparaison inter-services
                 </CardTitle>
                 <CardDescription>
-                  Taux d&apos;atteinte par service (vert ≥90%, orange 70–90%, rouge &lt;70%)
+                  Taux d&apos;atteinte par service selon la grille de notation (5 niveaux)
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -363,15 +355,7 @@ export default function DirecteurServicesPage() {
                         <TableCell className="text-right">{svc.nbEmployes}</TableCell>
                         <TableCell className="text-right">{svc.kpiActifs}</TableCell>
                         <TableCell className="text-right">
-                          <span
-                            className={
-                              svc.tauxAtteinte >= 90
-                                ? 'text-green-600'
-                                : svc.tauxAtteinte >= 70
-                                  ? 'text-orange-600'
-                                  : 'text-red-600'
-                            }
-                          >
+                          <span className={getNotationGrille(svc.tauxAtteinte).textClassName}>
                             {svc.tauxAtteinte.toFixed(1)}%
                           </span>
                         </TableCell>

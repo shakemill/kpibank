@@ -32,9 +32,16 @@ export async function PUT(
     const catalogue = await prisma.catalogueKpi.update({
       where: { id },
       data: {
+        ...(parsed.data.code !== undefined && { code: parsed.data.code }),
         ...(parsed.data.nom != null && { nom: parsed.data.nom }),
         ...(parsed.data.description !== undefined && { description: parsed.data.description }),
+        ...(parsed.data.objectif_qualite !== undefined && { objectif_qualite: parsed.data.objectif_qualite }),
+        ...(parsed.data.formule !== undefined && { formule: parsed.data.formule }),
         ...(parsed.data.type != null && { type: parsed.data.type }),
+        ...(parsed.data.categorie !== undefined && { categorie: parsed.data.categorie }),
+        ...(parsed.data.frequence !== undefined && { frequence: parsed.data.frequence }),
+        ...(parsed.data.sens_calcul != null && { sens_calcul: parsed.data.sens_calcul }),
+        ...(parsed.data.portee != null && { portee: parsed.data.portee }),
         ...(parsed.data.unite !== undefined && { unite: parsed.data.unite }),
         ...(parsed.data.mode_agregation != null && { mode_agregation: parsed.data.mode_agregation }),
         ...(parsed.data.actif !== undefined && { actif: parsed.data.actif }),

@@ -1,8 +1,10 @@
+import { isObjectifAtteint } from '@/lib/notation-grille'
 import { prisma } from '@/lib/prisma'
 import {
   calculerAgregation,
   calculerTauxAtteinte,
   type ModeAgregation,
+  type SensCalculKpi,
   type TypeKpi,
 } from '@/lib/saisie-utils'
 
@@ -53,6 +55,8 @@ export type ConsolidationDirectionResult = {
   directionId: number
   periodeId: number
   tauxAtteinteMoyen: number
+  scoreDirectionKpis: number
+  scoreEmployes: number
 }
 
 function inPeriod(
@@ -93,7 +97,14 @@ export async function consolidateEmploye(
     },
     include: {
       catalogueKpi: {
-        select: { id: true, nom: true, type: true, mode_agregation: true, unite: true },
+        select: {
+          id: true,
+          nom: true,
+          type: true,
+          mode_agregation: true,
+          unite: true,
+          sens_calcul: true,
+        },
       },
       kpiService: {
         select: {
@@ -160,10 +171,12 @@ export async function consolidateEmploye(
       (ke.catalogueKpi.mode_agregation ?? 'MOYENNE') as ModeAgregation
     )
     const typeKpi = (ke.catalogueKpi.type ?? 'QUANTITATIF') as TypeKpi
+    const sensCalcul = (ke.catalogueKpi.sens_calcul ?? 'DIRECT') as SensCalculKpi
     const tauxAtteinte = calculerTauxAtteinte(
       valeurAgregee,
       ke.cible,
-      typeKpi
+      typeKpi,
+      sensCalcul
     )
 
     const cibleService = ke.kpiService?.cible ?? ke.cible
@@ -209,7 +222,12 @@ export async function consolidateEmploye(
     })
   }
 
-  const scoreGlobal = sumPoids > 0 ? sumPondsTaux / sumPoids : 0
+  const scoreGlobal =
+    sumPoids > 0
+      ? sumPondsTaux / sumPoids
+      : kpiEmployes.length > 0
+        ? details.reduce((s, d) => s + d.tauxAtteinte, 0) / kpiEmployes.length
+        : 0
 
   const skipScorePeriode = options?.includeSoumises
   if (kpiEmployeIds.length > 0 && !skipScorePeriode) {
@@ -247,54 +265,24 @@ export async function consolidateService(
   })
   if (!service) throw new Error('Service introuvable')
 
-  const employes = await prisma.user.findMany({
-    where: { serviceId, role: 'EMPLOYE', actif: true },
+  const membres = await prisma.user.findMany({
+    where: { serviceId, actif: true },
     select: { id: true },
   })
-  const employeIds = employes.map((e) => e.id)
-
-  for (const eid of employeIds) {
-    await consolidateEmploye(eid, periodeId)
-  }
-
-  const kpiEmployesService = await prisma.kpiEmploye.findMany({
-    where: { employeId: { in: employeIds }, periodeId },
-    select: { id: true, employeId: true, poids: true, kpiServiceId: true },
-  })
-
-  const scorePeriodes = await prisma.scorePeriode.findMany({
-    where: {
-      kpiEmployeId: { in: kpiEmployesService.map((k) => k.id) },
-      periodeId,
-    },
-    include: {
-      kpiEmploye: { select: { id: true, employeId: true, poids: true } },
-    },
-  })
+  const membreIds = membres.map((m) => m.id)
 
   const employeScores = new Map<number, number>()
-  for (const empId of employeIds) {
-    const sps = scorePeriodes.filter((s) => s.kpiEmploye.employeId === empId)
-    const totalPoids = sps.reduce((s, sp) => s + sp.kpiEmploye.poids, 0)
-    const pondTaux = sps.reduce((s, sp) => s + sp.taux_atteinte * sp.kpiEmploye.poids, 0)
-    const score = totalPoids > 0 ? pondTaux / totalPoids : 0
-    employeScores.set(empId, score)
+  for (const mid of membreIds) {
+    const result = await consolidateEmploye(mid, periodeId)
+    employeScores.set(mid, result.scoreGlobal)
   }
 
-  const nbEmployesTotal = employeIds.length
-  const nbEmployesObjectifAtteint = employeIds.filter(
-    (id) => (employeScores.get(id) ?? 0) >= 100
-  ).length
+  const scores = membreIds.map((id) => employeScores.get(id) ?? 0)
+  const tauxGlobal =
+    scores.length > 0 ? scores.reduce((s, v) => s + v, 0) / scores.length : 0
 
-  let tauxGlobal = 0
-  if (scorePeriodes.length > 0) {
-    const totalPoids = scorePeriodes.reduce((s, sp) => s + sp.kpiEmploye.poids, 0)
-    const pondTaux = scorePeriodes.reduce(
-      (s, sp) => s + sp.taux_atteinte * sp.kpiEmploye.poids,
-      0
-    )
-    tauxGlobal = totalPoids > 0 ? pondTaux / totalPoids : 0
-  }
+  const nbEmployesTotal = membreIds.length
+  const nbEmployesObjectifAtteint = scores.filter((s) => isObjectifAtteint(s)).length
 
   const now = new Date()
   await prisma.consolidationService.deleteMany({
@@ -318,6 +306,91 @@ export async function consolidateService(
     nbEmployesTotal,
     nbEmployesObjectifAtteint,
   }
+}
+
+
+async function consolidateDirectionKpis(
+  directionId: number,
+  periodeId: number
+): Promise<number> {
+  const periode = await prisma.periode.findUnique({
+    where: { id: periodeId },
+    select: { mois_debut: true, mois_fin: true, annee: true },
+  })
+  if (!periode) return 0
+
+  const kpiDirections = await prisma.kpiDirection.findMany({
+    where: { directionId, periodeId, statut: 'ACTIF' },
+    include: {
+      catalogueKpi: {
+        select: { type: true, sens_calcul: true, mode_agregation: true },
+      },
+    },
+  })
+  if (kpiDirections.length === 0) return 0
+
+  const kpiIds = kpiDirections.map((k) => k.id)
+  const saisies = await prisma.saisieDirection.findMany({
+    where: {
+      kpiDirectionId: { in: kpiIds },
+      annee: periode.annee,
+      mois: { gte: periode.mois_debut, lte: periode.mois_fin },
+      statut: { in: ['VALIDEE', 'AJUSTEE'] },
+    },
+    select: {
+      kpiDirectionId: true,
+      mois: true,
+      annee: true,
+      valeur_realisee: true,
+      valeur_ajustee: true,
+    },
+  })
+
+  const now = new Date()
+  await prisma.scorePeriodeDirection.deleteMany({
+    where: { kpiDirectionId: { in: kpiIds }, periodeId },
+  })
+
+  let sumPond = 0
+  let sumPoids = 0
+
+  for (const kd of kpiDirections) {
+    const mode = (kd.catalogueKpi.mode_agregation ?? 'MOYENNE') as ModeAgregation
+    const typeKpi = kd.catalogueKpi.type as TypeKpi
+    const sensCalcul = (kd.catalogueKpi.sens_calcul ?? 'DIRECT') as SensCalculKpi
+    const saisiesKpi = saisies
+      .filter((s) => s.kpiDirectionId === kd.id)
+      .map((s) => ({
+        mois: s.mois,
+        annee: s.annee,
+        valeur_realisee: s.valeur_ajustee ?? s.valeur_realisee,
+      }))
+
+    if (saisiesKpi.length === 0) continue
+
+    const valeurAgregee = calculerAgregation(saisiesKpi, mode)
+    const tauxAtteinte = calculerTauxAtteinte(
+      valeurAgregee,
+      kd.cible,
+      typeKpi,
+      sensCalcul
+    )
+
+    await prisma.scorePeriodeDirection.create({
+      data: {
+        kpiDirectionId: kd.id,
+        periodeId,
+        valeur_agregee: valeurAgregee,
+        taux_atteinte: tauxAtteinte,
+        calcule_le: now,
+      },
+    })
+
+    sumPond += tauxAtteinte * kd.poids
+    sumPoids += kd.poids
+  }
+
+  return sumPoids > 0 ? sumPond / sumPoids : 0
 }
 
 export async function consolidateDirection(
@@ -347,15 +420,13 @@ export async function consolidateDirection(
     select: { taux_atteinte_moyen: true, nb_employes_total: true },
   })
 
-  let tauxDirection = 0
+  let scoreEmployes = 0
   if (consolidations.length > 0) {
-    const totalEmployes = consolidations.reduce((s, c) => s + c.nb_employes_total, 0)
-    const pondTaux = consolidations.reduce(
-      (s, c) => s + c.taux_atteinte_moyen * c.nb_employes_total,
-      0
-    )
-    tauxDirection = totalEmployes > 0 ? pondTaux / totalEmployes : 0
+    scoreEmployes =
+      consolidations.reduce((s, c) => s + c.taux_atteinte_moyen, 0) / consolidations.length
   }
+
+  const scoreDirectionKpis = await consolidateDirectionKpis(directionId, periodeId)
 
   const now = new Date()
   await prisma.consolidationDirection.deleteMany({
@@ -365,7 +436,9 @@ export async function consolidateDirection(
     data: {
       directionId,
       periodeId,
-      taux_atteinte_moyen: tauxDirection,
+      taux_atteinte_moyen: scoreEmployes,
+      score_direction_kpis: scoreDirectionKpis,
+      score_employes: scoreEmployes,
       calcule_le: now,
     },
   })
@@ -373,6 +446,8 @@ export async function consolidateDirection(
   return {
     directionId,
     periodeId,
-    tauxAtteinteMoyen: tauxDirection,
+    tauxAtteinteMoyen: scoreEmployes,
+    scoreDirectionKpis,
+    scoreEmployes,
   }
 }

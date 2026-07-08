@@ -86,7 +86,7 @@ function LoginForm() {
           <div className="space-y-6">
             <div className="space-y-2">
               <h2 className="text-4xl font-bold leading-tight">
-                Système de Gestion des KPI pour Banques
+                Système de Gestion des KPI du Capital Humain
               </h2>
               <p className="text-lg text-white/80 max-w-md">
                 Suivez et mesurez vos indicateurs en temps réel pour atteindre vos objectifs.
@@ -133,12 +133,12 @@ function LoginForm() {
                 priority
               />
             </div>
-            <p className="text-sm text-gray-600">Système de Gestion des KPI pour Banques</p>
+            <p className="text-sm text-gray-600">Système de Gestion des KPI du Capital Humain</p>
           </div>
 
           <div className="space-y-2">
             <h2 className="text-3xl font-bold text-gray-900">Connexion</h2>
-            <p className="text-gray-600">Accédez à votre espace de travail</p>
+            <p className="text-gray-600">Accédez à votre espace de personnel</p>
           </div>
 
           {timeout && (
@@ -170,7 +170,7 @@ function LoginForm() {
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                         <Input
                           type="email"
-                          placeholder="votre.email@banque.com"
+                          placeholder="prenom.nom@bgfi.com"
                           disabled={isLoading}
                           className="pl-10 h-12 border-gray-300 focus:border-[#003369] focus:ring-[#003369] bg-white"
                           {...field}
@@ -235,7 +235,7 @@ function LoginForm() {
           </Form>
 
           <p className="text-center text-xs text-gray-500">
-            © 2026 Système de Gestion des KPI pour Banques. Tous droits réservés.
+            © 2026 Système de Gestion des KPI du Capital Humain. Tous droits réservés.
           </p>
         </div>
       </div>

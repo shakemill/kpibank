@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { getCollaborateursAssignables } from '@/lib/assignation-rules'
-import { calculerTauxAtteinte, type TypeKpi } from '@/lib/saisie-utils'
+import { calculerTauxAtteinte, type SensCalculKpi, type TypeKpi } from '@/lib/saisie-utils'
 import { apiSuccess, apiError } from '@/lib/api-response'
 
 export async function GET(request: NextRequest) {
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
         select: {
           id: true,
           cible: true,
-          catalogueKpi: { select: { id: true, nom: true, type: true, unite: true } },
+          catalogueKpi: { select: { id: true, nom: true, type: true, unite: true, sens_calcul: true } },
         },
       },
     },
@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
     const valeur = s.valeur_ajustee ?? s.valeur_realisee ?? 0
     const cible = s.kpiEmploye.cible
     const type = s.kpiEmploye.catalogueKpi.type as TypeKpi
-    const taux = calculerTauxAtteinte(valeur, cible, type)
+    const sensCalcul = (s.kpiEmploye.catalogueKpi.sens_calcul ?? 'DIRECT') as SensCalculKpi
+    const taux = calculerTauxAtteinte(valeur, cible, type, sensCalcul)
     return {
       ...s,
       valeur_affichée: valeur,

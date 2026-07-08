@@ -78,8 +78,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const path = request.nextUrl.pathname
       const isLogin = path === '/login'
       const isAuthApi = path.startsWith('/api/auth')
+      const isCronApi = path.startsWith('/api/cron')
       const isProfil = path === '/profil'
-      if (isLogin || isAuthApi) return true
+      if (isLogin || isAuthApi || isCronApi) return true
       if (!session?.user) return NextResponse.redirect(new URL('/login', request.url))
       const forcePasswordChange = (session.user as { force_password_change?: boolean }).force_password_change
       if (forcePasswordChange && !isProfil) {
@@ -125,11 +126,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!Number.isNaN(userId)) {
           const u = await prisma.user.findUnique({
             where: { id: userId },
-            select: { force_password_change: true },
+            select: {
+              force_password_change: true,
+              direction: { select: { nom: true } },
+              service: { select: { nom: true } },
+            },
           })
           session.user.force_password_change = u?.force_password_change ?? false
+          session.user.perimetreLabel = u?.service?.nom ?? u?.direction?.nom ?? null
         } else {
           session.user.force_password_change = (token as { force_password_change?: boolean }).force_password_change ?? false
+          session.user.perimetreLabel = null
         }
       }
       return session

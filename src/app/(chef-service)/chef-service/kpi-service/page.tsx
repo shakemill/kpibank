@@ -145,7 +145,7 @@ export default function KpiServicePage() {
   }, [periodeId])
 
   const fetchCatalogue = useCallback(async () => {
-    const res = await fetch('/api/kpi/catalogue')
+    const res = await fetch('/api/kpi/catalogue?actif=true&portee=SERVICE')
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
       toast({ title: 'Erreur', description: data?.error ?? 'Chargement catalogue', variant: 'destructive' })

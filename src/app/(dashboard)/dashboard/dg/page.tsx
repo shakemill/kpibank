@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Card,
   CardContent,
@@ -82,45 +82,46 @@ export default function DashboardDGPage() {
     setMounted(true)
   }, [])
 
-  const fetchPeriodes = useCallback(async () => {
-    const res = await fetch('/api/periodes')
-    if (!res.ok) return
-    const list = await res.json()
-    setPeriodes(list)
-    const enCours = list.find((p: Periode) => p.statut === 'EN_COURS')
-    if (list.length > 0 && periodeId == null) setPeriodeId(enCours ? enCours.id : list[0].id)
-  }, [periodeId])
-
-  const fetchDashboard = useCallback(async () => {
-    if (periodeId == null) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/dashboard/dg?periodeId=${periodeId}`)
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setError(err?.error ?? 'Erreur chargement')
-        setData(null)
-        return
-      }
-      const json = await res.json()
-      setData(json)
-    } finally {
-      setLoading(false)
-    }
-  }, [periodeId])
-
   useEffect(() => {
     let cancelled = false
-    fetchPeriodes().then(() => {
-      if (!cancelled && periodeId != null) fetchDashboard()
-    })
+    async function loadPeriodes() {
+      const res = await fetch('/api/periodes')
+      if (cancelled || !res.ok) return
+      const list = await res.json()
+      setPeriodes(list)
+      const enCours = list.find((p: Periode) => p.statut === 'EN_COURS')
+      if (list.length > 0) {
+        setPeriodeId(enCours ? enCours.id : list[0].id)
+      }
+    }
+    loadPeriodes()
     return () => { cancelled = true }
-  }, [fetchPeriodes, periodeId])
+  }, [])
 
   useEffect(() => {
-    if (periodeId != null && periodes.length > 0) fetchDashboard()
-  }, [periodeId, fetchDashboard, periodes.length])
+    if (periodeId == null) return
+    let cancelled = false
+    async function loadDashboard() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/dashboard/dg?periodeId=${periodeId}`)
+        if (cancelled) return
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          setError(err?.error ?? 'Erreur chargement')
+          setData(null)
+          return
+        }
+        const json = await res.json()
+        setData(json)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadDashboard()
+    return () => { cancelled = true }
+  }, [periodeId])
 
   const handlePrint = () => {
     if (data?.drillDown?.length) {

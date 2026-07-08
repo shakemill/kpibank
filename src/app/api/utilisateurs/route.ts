@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import type { Prisma, Role } from '@/generated/prisma/client'
 import { userCreateSchema } from '@/lib/validations/organisation'
 import { sendMail } from '@/lib/mailer'
 import { getEtablissementNom } from '@/lib/etablissement'
 import { templateNouveauCompte } from '@/lib/email-templates'
+import { generateRandomPassword } from '@/lib/password-utils'
+import {
+  synchroniserResponsableApresUtilisateur,
+  validerDirecteurDirection,
+} from '@/lib/directeur-adjoint-utils'
+import {
+  synchroniserResponsableApresUtilisateurService,
+  validerChefService,
+} from '@/lib/service-chef-utils'
+import { normaliserRattachementUtilisateur } from '@/lib/user-org-utils'
 import bcrypt from 'bcryptjs'
-
-function randomPassword(length = 12): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!'
-  let s = ''
-  for (let i = 0; i < length; i++) s += chars.charAt(Math.floor(Math.random() * chars.length))
-  return s
-}
 
 export async function GET(request: NextRequest) {
   const result = await getSessionAndRequireDG()
@@ -27,25 +31,36 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
   const pageSize = Math.min(50, Math.max(6, parseInt(searchParams.get('pageSize') ?? '12', 10)))
 
-  const where: {
-    role?: string
-    directionId?: number
-    actif?: boolean
-    OR?: { nom?: { contains: string; mode: 'insensitive' }; prenom?: { contains: string; mode: 'insensitive' }; email?: { contains: string; mode: 'insensitive' } }[]
-  } = {}
-  if (role) where.role = role
-  if (directionId) where.directionId = parseInt(directionId, 10)
+  const andConditions: Prisma.UserWhereInput[] = []
+
+  if (role) andConditions.push({ role: role as Role })
   if (actif !== null && actif !== undefined && actif !== '') {
-    where.actif = actif === 'true'
+    andConditions.push({ actif: actif === 'true' })
+  }
+  if (directionId) {
+    const dirId = parseInt(directionId, 10)
+    if (!Number.isNaN(dirId)) {
+      andConditions.push({
+        OR: [
+          { directionId: dirId },
+          { service: { directionId: dirId } },
+        ],
+      })
+    }
   }
   if (search.length > 0) {
-    const term = search
-    where.OR = [
-      { nom: { contains: term, mode: 'insensitive' } },
-      { prenom: { contains: term, mode: 'insensitive' } },
-      { email: { contains: term, mode: 'insensitive' } },
-    ]
+    andConditions.push({
+      OR: [
+        { nom: { contains: search, mode: 'insensitive' } },
+        { prenom: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ],
+    })
   }
+
+  const where: Prisma.UserWhereInput =
+    andConditions.length > 0 ? { AND: andConditions } : {}
+
   try {
     const [users, total] = await Promise.all([
       prisma.user.findMany({
@@ -93,19 +108,44 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     )
   }
-  const tempPassword = randomPassword()
+  const tempPassword = generateRandomPassword()
   const hashedPassword = await bcrypt.hash(tempPassword, 10)
+
+  const rattachement = normaliserRattachementUtilisateur({
+    role: parsed.data.role,
+    directionId: parsed.data.directionId ?? null,
+    serviceId: parsed.data.serviceId ?? null,
+  })
+
+  const validationDirecteur = await validerDirecteurDirection({
+    role: parsed.data.role,
+    directionId: rattachement.directionId,
+    posteOccupe: parsed.data.posteOccupe ?? null,
+  })
+  if (!validationDirecteur.ok) {
+    return NextResponse.json({ error: validationDirecteur.error }, { status: 400 })
+  }
+
+  const validationChef = await validerChefService({
+    role: parsed.data.role,
+    serviceId: rattachement.serviceId,
+  })
+  if (!validationChef.ok) {
+    return NextResponse.json({ error: validationChef.error }, { status: 400 })
+  }
+
   try {
     const user = await prisma.user.create({
       data: {
         nom: parsed.data.nom,
-        prenom: parsed.data.prenom,
+        prenom: parsed.data.prenom?.trim() || '',
         email: parsed.data.email.trim().toLowerCase(),
         telephone: parsed.data.telephone ?? undefined,
+        posteOccupe: parsed.data.posteOccupe?.trim() || undefined,
         password: hashedPassword,
         role: parsed.data.role,
-        directionId: parsed.data.directionId ?? undefined,
-        serviceId: parsed.data.serviceId ?? undefined,
+        directionId: rattachement.directionId ?? undefined,
+        serviceId: rattachement.serviceId ?? undefined,
         managerId: parsed.data.managerId ?? undefined,
       },
       include: {
@@ -113,6 +153,19 @@ export async function POST(request: NextRequest) {
         direction: { select: { id: true, nom: true, code: true } },
         manager: { select: { id: true, nom: true, prenom: true, email: true } },
       },
+    })
+
+    await synchroniserResponsableApresUtilisateur({
+      userId: user.id,
+      role: user.role,
+      directionId: user.directionId,
+      posteOccupe: user.posteOccupe,
+    })
+
+    await synchroniserResponsableApresUtilisateurService({
+      userId: user.id,
+      role: user.role,
+      serviceId: user.serviceId,
     })
 
     try {

@@ -28,11 +28,7 @@ import {
 } from '@/components/ui/select'
 import { BarChart3, Eye, Download } from 'lucide-react'
 
-const ROLE_LABELS: Record<string, string> = {
-  EMPLOYE: 'Employé',
-  CHEF_SERVICE: 'Chef de service',
-  DIRECTEUR: 'Directeur',
-}
+import { libellerRole } from '@/lib/role-labels'
 
 type PeriodeOption = { id: number; code: string }
 type EquipeRow = {
@@ -126,7 +122,7 @@ export default function DirecteurRapportsPage() {
 </head>
 <body>
   <h1>Rapport de performance</h1>
-  <div class="meta">${data.user.prenom} ${data.user.nom} — ${ROLE_LABELS[data.user.role] || data.user.role} — Période ${data.periodeCode}</div>
+  <div class="meta">${data.user.prenom} ${data.user.nom} — ${libellerRole(data.user.role)} — Période ${data.periodeCode}</div>
   <h2>Score global période</h2>
   <div class="score-big">${scoreGlobal.toFixed(1)}%</div>
   ${
@@ -224,7 +220,7 @@ export default function DirecteurRapportsPage() {
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.nom}</TableCell>
                     <TableCell>{row.prenom}</TableCell>
-                    <TableCell>{ROLE_LABELS[row.role] ?? row.role}</TableCell>
+                    <TableCell>{libellerRole(row.role)}</TableCell>
                     <TableCell className="text-right">
                       {row.scoreGlobal > 0 ? `${row.scoreGlobal.toFixed(1)}%` : '—'}
                     </TableCell>

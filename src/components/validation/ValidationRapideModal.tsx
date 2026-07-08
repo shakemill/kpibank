@@ -10,6 +10,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { getNotationGrille } from '@/lib/notation-grille'
 import {
   Table,
   TableBody,
@@ -79,21 +80,25 @@ export function ValidationRapideModal({
   const handleToutValider = async () => {
     if (list.length === 0) return
     setValidating(true)
-    let ok = 0
-    for (const s of list) {
-      const res = await fetch(`/api/saisies/${s.id}/valider`, { method: 'POST' })
-      if (res.ok) ok += 1
-      else {
-        const data = await res.json().catch(() => ({}))
-        toast.error(data?.error ?? `Erreur validation KPI`)
-      }
-    }
+    const res = await fetch('/api/saisies/valider-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeId, mois, annee }),
+    })
+    const data = await res.json().catch(() => ({}))
     setValidating(false)
-    if (ok > 0) {
-      toast.success(ok === list.length ? 'Toutes les saisies ont été validées' : `${ok} saisie(s) validée(s)`)
-      onUpdate()
-      onClose()
+    if (!res.ok) {
+      toast.error(data?.error ?? 'Erreur validation')
+      return
     }
+    const count = typeof data.count === 'number' ? data.count : list.length
+    toast.success(
+      count === list.length
+        ? 'Toutes les saisies ont été validées'
+        : `${count} saisie(s) validée(s)`
+    )
+    onUpdate()
+    onClose()
   }
 
   return (
@@ -127,7 +132,7 @@ export function ValidationRapideModal({
                     <TableCell className="text-right">{s.valeur_affichée}</TableCell>
                     <TableCell className="text-right">{s.kpiEmploye.cible}</TableCell>
                     <TableCell className="text-right">
-                      <span className={s.taux >= 100 ? 'text-green-600' : s.taux >= 70 ? 'text-orange-600' : 'text-red-600'}>
+                      <span className={getNotationGrille(s.taux).textClassName}>
                         {Math.round(s.taux)}%
                       </span>
                     </TableCell>

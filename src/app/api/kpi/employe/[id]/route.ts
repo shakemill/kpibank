@@ -4,6 +4,7 @@ import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { calculerPoidsRestantEmploye } from '@/lib/kpi-utils'
 import { kpiEmployeUpdateSchema } from '@/lib/validations/kpi'
+import { peutAssignerA } from '@/lib/assignation-rules'
 
 const MANAGER_ROLES = ['MANAGER', 'DG', 'DIRECTEUR', 'CHEF_SERVICE']
 
@@ -113,20 +114,38 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: 'KPI employé introuvable' }, { status: 404 })
   }
-  const managerId = parseInt((result.session!.user as { id?: string }).id!, 10)
-  if (existing.assigneParId !== managerId) {
-    return NextResponse.json({ error: 'Accès refusé' }, { status: 403 })
+  const sessionUser = result.session!.user as {
+    id?: string
+    role?: string
+    serviceId?: number | null
+    directionId?: number | null
   }
-  const periodeStatut = existing.periode?.statut
-  if (periodeStatut === 'EN_COURS' || periodeStatut === 'CLOTUREE') {
-    return NextResponse.json(
-      { error: 'Impossible de supprimer un KPI dont la période est en cours ou clôturée.' },
-      { status: 400 }
-    )
+  const assignateurId = parseInt(sessionUser.id ?? '', 10)
+  if (Number.isNaN(assignateurId)) {
+    return NextResponse.json({ error: 'Session invalide' }, { status: 401 })
+  }
+  const autorise = await peutAssignerA(
+    {
+      id: assignateurId,
+      role: sessionUser.role ?? '',
+      serviceId: sessionUser.serviceId ?? null,
+      directionId: sessionUser.directionId ?? null,
+    },
+    existing.employeId
+  )
+  if (!autorise) {
+    return NextResponse.json({ error: 'Accès refusé' }, { status: 403 })
   }
   if (existing.statut !== 'DRAFT') {
     return NextResponse.json(
       { error: 'Impossible de supprimer un KPI déjà notifié ou renseigné.' },
+      { status: 400 }
+    )
+  }
+  const periodeStatut = existing.periode?.statut
+  if (periodeStatut === 'CLOTUREE') {
+    return NextResponse.json(
+      { error: 'Impossible de supprimer un KPI dont la période est clôturée.' },
       { status: 400 }
     )
   }

@@ -32,6 +32,7 @@ import { TableSkeleton } from '@/components/table-skeleton'
 import { CardsGridSkeleton } from '@/components/card-skeleton'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MesKpiPersoSection } from '@/components/dashboard/mes-kpi-perso-section'
+import { getNotationGrille } from '@/lib/notation-grille'
 
 type Periode = { id: number; code: string; statut: string }
 type EmployeRow = {
@@ -51,12 +52,6 @@ type ManagerData = {
   nbSaisiesManquantes: number
   chartData: Record<string, string | number>[]
   kpiNoms: string[]
-}
-
-function scoreRowClass(score: number): string {
-  if (score < 70) return 'text-red-600 dark:text-red-400 font-medium'
-  if (score < 90) return 'text-orange-600 dark:text-orange-400 font-medium'
-  return 'text-green-600 dark:text-green-400 font-medium'
 }
 
 export default function DashboardManagerPage() {
@@ -154,7 +149,7 @@ export default function DashboardManagerPage() {
       </div>
 
       {/* Section "Mes KPI Personnels" (assignés par Chef de Service) */}
-      <MesKpiPersoSection assigneParLabel="votre Chef de service" />
+      <MesKpiPersoSection assigneParLabel="votre Chef département / Chef d'agence" />
 
       {loading && !data ? (
         <>
@@ -233,7 +228,7 @@ export default function DashboardManagerPage() {
                   {data.employes.map((e) => (
                     <TableRow key={e.id}>
                       <TableCell className="font-medium">{e.nom} {e.prenom}</TableCell>
-                      <TableCell className={`text-right ${scoreRowClass(e.scoreGlobal)}`}>
+                      <TableCell className={`text-right ${getNotationGrille(e.scoreGlobal).textClassName}`}>
                         {e.scoreGlobal.toFixed(0)} %
                       </TableCell>
                       <TableCell className="text-right">

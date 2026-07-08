@@ -4,9 +4,18 @@
 
 export type StatutPeriodeSaisie = 'OUVERTE' | 'EN_RETARD' | 'VERROUILLEE'
 
+/** Statuts où l'employé peut corriger sa saisie (dont après un rejet). */
+export const STATUTS_SAISIE_MODIFIABLES = ['OUVERTE', 'EN_RETARD', 'REJETEE'] as const
+
+export function isSaisieModifiable(statut: string): boolean {
+  return (STATUTS_SAISIE_MODIFIABLES as readonly string[]).includes(statut)
+}
+
 export type ModeAgregation = 'CUMUL' | 'MOYENNE' | 'DERNIER'
 
 export type TypeKpi = 'QUANTITATIF' | 'QUALITATIF' | 'COMPORTEMENTAL'
+
+export type SensCalculKpi = 'DIRECT' | 'PLAFOND' | 'ZERO_DEFAUT' | 'ABSOLU'
 
 export interface SaisieMensuelleForAgregation {
   mois: number
@@ -110,22 +119,37 @@ export function calculerAgregation(
 
 /**
  * Calcule le taux d'atteinte en %.
- * - Quantitatif / Qualitatif : (realise / cible) * 100
- * - Comportemental : (realise / 4) * 100 (échelle 1 à 4)
+ * - DIRECT / ABSOLU : (realise / cible) × 100
+ * - PLAFOND : realise ≤ cible → 100 %, sinon (cible / realise) × 100
+ * - ZERO_DEFAUT : realise === 0 → 100 %, sinon 0 %
+ * - Comportemental : (realise / 4) × 100 (échelle 1 à 4)
  * Plafonné à 150 % maximum.
  */
 export function calculerTauxAtteinte(
   realise: number,
   cible: number,
-  type: TypeKpi
+  type: TypeKpi,
+  sensCalcul: SensCalculKpi = 'DIRECT'
 ): number {
-  if (cible === 0 && type !== 'COMPORTEMENTAL') return 0
   let taux: number
+
   if (type === 'COMPORTEMENTAL') {
     taux = (realise / 4) * 100
+  } else if (sensCalcul === 'ZERO_DEFAUT') {
+    taux = realise === 0 ? 100 : 0
+  } else if (sensCalcul === 'PLAFOND') {
+    if (cible <= 0) {
+      taux = realise <= 0 ? 100 : 0
+    } else if (realise <= cible) {
+      taux = 100
+    } else {
+      taux = (cible / realise) * 100
+    }
   } else {
+    if (cible === 0) return 0
     taux = (realise / cible) * 100
   }
+
   return Math.min(150, Math.max(0, taux))
 }
 
@@ -207,9 +231,11 @@ export function calculerRealiseCumule(
   inclureBrouillons = false
 ): number {
   const statutsInclus = inclureBrouillons
-    ? ['VALIDEE', 'AJUSTEE', 'OUVERTE', 'EN_RETARD']
+    ? ['VALIDEE', 'AJUSTEE', 'SOUMISE', 'OUVERTE', 'EN_RETARD']
     : ['VALIDEE', 'AJUSTEE']
-  const saisiesValidees = saisies.filter((s) => statutsInclus.includes(s.statut))
+  const saisiesValidees = saisies
+    .filter((s) => statutsInclus.includes(s.statut) && s.mois <= moisCourant)
+    .filter((s) => s.valeur_realisee != null && !Number.isNaN(s.valeur_realisee))
 
   switch (modeAgregation) {
     case 'CUMUL':
@@ -234,5 +260,19 @@ export function calculerRealiseCumule(
     }
     default:
       return 0
+  }
+}
+
+/** Libellé du bloc réalisé sur la page saisie selon le mode d'agrégation. */
+export function libellerRealisePeriode(modeAgregation: ModeAgregation): string {
+  switch (modeAgregation) {
+    case 'CUMUL':
+      return 'Réalisé cumulé'
+    case 'MOYENNE':
+      return 'Moyenne réalisée'
+    case 'DERNIER':
+      return 'Dernière valeur'
+    default:
+      return 'Réalisé période'
   }
 }

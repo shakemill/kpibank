@@ -37,9 +37,10 @@ export const serviceUpdateSchema = z.object({
 
 export const userCreateSchema = z.object({
   nom: z.string().min(1, 'Le nom est requis'),
-  prenom: z.string().min(1, 'Le prénom est requis'),
+  prenom: z.string().optional().nullable(),
   email: z.string().email('Email invalide'),
   telephone: z.string().optional().nullable(),
+  posteOccupe: z.string().optional().nullable(),
   role: roleEnum,
   directionId: z.number().int().positive().optional().nullable(),
   serviceId: z.number().int().positive().optional().nullable(),
@@ -48,15 +49,19 @@ export const userCreateSchema = z.object({
 
 export const userUpdateSchema = z.object({
   nom: z.string().min(1).optional(),
-  prenom: z.string().min(1).optional(),
+  prenom: z.string().optional().nullable(),
   email: z.string().email().optional(),
   telephone: z.string().optional().nullable(),
+  posteOccupe: z.string().optional().nullable(),
   role: roleEnum.optional(),
   directionId: z.number().int().positive().optional().nullable(),
   serviceId: z.number().int().positive().optional().nullable(),
   managerId: z.number().int().positive().optional().nullable(),
   actif: z.boolean().optional(),
-  password: z.string().min(8).optional(),
+  password: z.preprocess(
+    (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+    z.string().min(8).optional(),
+  ),
 })
 
 export const parametreUpdateSchema = z.object({
@@ -70,6 +75,10 @@ export const etablissementUpdateSchema = z.object({
   actif: z.boolean().optional(),
 })
 
+export const directionCatalogueKpiAssignSchema = z.object({
+  catalogueKpiId: z.number().int().positive(),
+})
+
 export type DirectionCreateInput = z.infer<typeof directionCreateSchema>
 export type DirectionUpdateInput = z.infer<typeof directionUpdateSchema>
 export type ServiceCreateInput = z.infer<typeof serviceCreateSchema>
@@ -78,3 +87,4 @@ export type UserCreateInput = z.infer<typeof userCreateSchema>
 export type UserUpdateInput = z.infer<typeof userUpdateSchema>
 export type ParametreUpdateInput = z.infer<typeof parametreUpdateSchema>
 export type EtablissementUpdateInput = z.infer<typeof etablissementUpdateSchema>
+export type DirectionCatalogueKpiAssignInput = z.infer<typeof directionCatalogueKpiAssignSchema>

@@ -46,15 +46,18 @@ export async function POST(
       { status: 400 }
     )
   }
-  const newStatut = parsed.data.action === 'MAINTENU' ? ('MAINTENU' as const) : ('REVISE' as const)
+  const decision = parsed.data.action === 'MAINTENU' ? ('MAINTENU' as const) : ('REVISE' as const)
+  const now = new Date()
   const updateData: {
-    statut: 'MAINTENU' | 'REVISE'
+    statut: 'VALIDE'
     reponse_contestation: string
+    date_acceptation: Date
     cible?: number
     poids?: number
   } = {
-    statut: newStatut,
+    statut: 'VALIDE',
     reponse_contestation: parsed.data.reponse_contestation,
+    date_acceptation: now,
   }
   if (parsed.data.action === 'REVISE') {
     if (parsed.data.cible !== undefined) updateData.cible = parsed.data.cible
@@ -70,7 +73,7 @@ export async function POST(
         assignePar: { select: { id: true, nom: true, prenom: true } },
       },
     })
-    await notifierEmployeReponseContestation(kpi.employe.id, id, newStatut)
+    await notifierEmployeReponseContestation(kpi.employe.id, id, decision)
     return NextResponse.json(kpi)
   } catch (e) {
     return NextResponse.json(

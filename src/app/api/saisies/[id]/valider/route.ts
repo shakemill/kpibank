@@ -3,8 +3,7 @@ import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessEmployeData } from '@/lib/access-control'
 import { apiSuccess, apiError } from '@/lib/api-response'
-import { notifierSaisieValidee } from '@/lib/notifications'
-import { consolidateEmploye } from '@/lib/consolidation'
+import { finaliserValidationEmployeMois } from '@/lib/saisie-validation'
 
 export async function POST(
   request: NextRequest,
@@ -54,26 +53,7 @@ export async function POST(
       },
     })
 
-    let score = 0
-    try {
-      const periodes = await prisma.periode.findMany({
-        where: {
-          actif: true,
-          mois_debut: { lte: saisie.mois },
-          mois_fin: { gte: saisie.mois },
-          annee: saisie.annee,
-        },
-        select: { id: true },
-        take: 1,
-      })
-      if (periodes[0]) {
-        const res = await consolidateEmploye(saisie.employeId, periodes[0].id)
-        score = res.scoreGlobal
-      }
-    } catch {
-      // Garder score à 0
-    }
-    await notifierSaisieValidee(saisie.employeId, saisie.mois, saisie.annee, score)
+    await finaliserValidationEmployeMois(saisie.employeId, saisie.mois, saisie.annee)
 
     return apiSuccess(updated)
   } catch (e) {

@@ -11,6 +11,8 @@ declare module 'next-auth' {
       serviceId: number | null
       directionId: number | null
       managerId: number | null
+      force_password_change?: boolean
+      perimetreLabel?: string | null
     } & DefaultSession['user']
   }
 }

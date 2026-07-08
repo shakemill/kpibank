@@ -22,17 +22,23 @@ import {
 } from '@/components/ui/select'
 
 type DirectionOption = { id: number; nom: string; code: string }
-type UserOption = { id: number; nom: string; prenom: string; email: string }
+type ChefService = { id: number; nom: string; prenom: string; email: string }
 
 interface ServiceFormProps {
   defaultValues?: Partial<ServiceCreateInput & { actif?: boolean }>
   directions: DirectionOption[]
-  users: UserOption[]
+  chefService?: ChefService | null
   onSubmit: (values: ServiceCreateInput | ServiceUpdateInput) => void | Promise<void>
   isEdit?: boolean
 }
 
-export function ServiceForm({ defaultValues, directions, users, onSubmit, isEdit }: ServiceFormProps) {
+function libellerChefService(chef: ChefService | null | undefined): string {
+  if (!chef) return '—'
+  const nomComplet = [chef.prenom, chef.nom].filter(Boolean).join(' ')
+  return `${nomComplet} (${chef.email})`
+}
+
+export function ServiceForm({ defaultValues, directions, chefService, onSubmit, isEdit }: ServiceFormProps) {
   const schema = isEdit ? serviceUpdateSchema : serviceCreateSchema
   const form = useForm<ServiceCreateInput | ServiceUpdateInput>({
     resolver: zodResolver(schema),
@@ -41,7 +47,6 @@ export function ServiceForm({ defaultValues, directions, users, onSubmit, isEdit
       code: defaultValues?.code ?? '',
       description: defaultValues?.description ?? '',
       directionId: defaultValues?.directionId ?? undefined,
-      responsableId: defaultValues?.responsableId ?? undefined,
     },
   })
 
@@ -115,34 +120,15 @@ export function ServiceForm({ defaultValues, directions, users, onSubmit, isEdit
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="responsableId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Responsable (optionnel)</FormLabel>
-              <Select
-                onValueChange={(v) => field.onChange(v === 'none' ? null : (v ? parseInt(v, 10) : null))}
-                value={field.value != null ? String(field.value) : 'none'}
-              >
-                <FormControl>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Sélectionner un responsable" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="none">Aucun</SelectItem>
-                  {users.map((u) => (
-                    <SelectItem key={u.id} value={String(u.id)}>
-                      {u.prenom} {u.nom} ({u.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {isEdit && (
+          <div className="rounded-lg border bg-muted/30 px-3 py-2.5 space-y-1">
+            <p className="text-sm font-medium">Chef département / agence</p>
+            <p className="text-sm text-muted-foreground">{libellerChefService(chefService)}</p>
+            <p className="text-xs text-muted-foreground">
+              Défini via Organisation → Utilisateurs (rôle Chef département / Chef d&apos;agence).
+            </p>
+          </div>
+        )}
         <Button type="submit" disabled={form.formState.isSubmitting}>
           {form.formState.isSubmitting ? 'Enregistrement...' : isEdit ? 'Mettre à jour' : 'Créer'}
         </Button>

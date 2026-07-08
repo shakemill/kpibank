@@ -11,7 +11,12 @@
     "seed:2026": "tsx prisma/seed-2026.ts",
     "seed:dsi": "tsx prisma/seed-dsi.ts",
     "seed:bgfi": "tsx prisma/seed-bgfi-dsi-commercial.ts",
+    "seed:directions-bgfi": "tsx prisma/scripts/seed-directions-bgfi.ts",
+    "seed:directions-officielles": "tsx prisma/scripts/seed-directions-officielles.ts",
+    "seed:services-banque-privee": "tsx prisma/scripts/seed-services-banque-privee.ts",
+    "seed:services-retail-banking": "tsx prisma/scripts/seed-services-retail-banking.ts",
     "add-periodes-2026": "tsx prisma/scripts/add-periodes-2026.ts",
+    "generer-kpi-t1-2026": "tsx prisma/scripts/generer-kpi-t1-2026.ts",
     "dupliquer-kpi-2026": "tsx prisma/scripts/dupliquer-kpi-2026.ts",
     "add-kpi-dsi-s1-2026": "tsx prisma/scripts/add-kpi-dsi-s1-2026.ts",
     "supprimer-utilisateurs-sauf-dg": "tsx prisma/scripts/supprimer-utilisateurs-sauf-dg.ts",
@@ -19,6 +24,8 @@
     "supprimer-kpi-et-periodes": "tsx prisma/scripts/supprimer-kpi-et-periodes.ts",
     "seed-catalogue-kpi": "tsx prisma/scripts/seed-catalogue-kpi.ts",
     "seed-catalogue-descriptions": "tsx prisma/scripts/seed-catalogue-descriptions.ts",
+    "import:repertoire-kpi-2026": "tsx prisma/scripts/import-repertoire-kpi-2026.ts",
+    "import:personnel-bgfi-2026": "tsx prisma/scripts/import-personnel-bgfi-2026.ts",
     "saisies-dates-fevrier": "tsx prisma/scripts/saisies-dates-fevrier.ts"
   },
   "prisma": {
@@ -98,7 +105,8 @@
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.21.0",
     "tw-animate-css": "1.3.3",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "xlsx": "^0.18.5"
   },
   "pnpm": {
     "overrides": {

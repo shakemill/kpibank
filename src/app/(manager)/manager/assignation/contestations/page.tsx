@@ -19,16 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, AlertCircle, Check, Edit } from 'lucide-react'
+import { formaterNomKpiAffichage } from '@/lib/kpi-cible-utils'
 
 type ContestationRow = {
   id: number
@@ -117,86 +109,93 @@ export default function ContestationsPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/manager/assignation')}>
+    <div className="min-w-0 space-y-6 p-4 sm:p-6">
+      <div className="flex items-start gap-3 sm:gap-4">
+        <Button variant="ghost" size="icon" className="shrink-0" onClick={() => router.push('/manager/assignation')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Contestations</h1>
-          <p className="text-muted-foreground mt-1">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Contestations</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Répondre aux contestations des employés : maintenir ou réviser le KPI.
           </p>
         </div>
       </div>
 
-      <Card className="border-border/50">
+      <Card className="border-border/50 overflow-hidden">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+            <div className="h-11 w-11 shrink-0 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
               <AlertCircle className="h-5 w-5 text-primary" />
             </div>
-            <div>
+            <div className="min-w-0">
               <CardTitle className="text-base">KPI contestés</CardTitle>
               <CardDescription>Motif de l&apos;employé et formulaire de réponse</CardDescription>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           {loading ? (
             <p className="text-muted-foreground">Chargement...</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employé</TableHead>
-                  <TableHead>KPI</TableHead>
-                  <TableHead>Cible / Poids</TableHead>
-                  <TableHead>Motif contestation</TableHead>
-                  <TableHead>Réponse / Date</TableHead>
-                  <TableHead className="w-[140px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {list.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-medium">
-                      {row.employe.prenom} {row.employe.nom}
-                    </TableCell>
-                    <TableCell>{row.catalogueKpi.nom}</TableCell>
-                    <TableCell>{row.cible} / {row.poids}%</TableCell>
-                    <TableCell className="max-w-[280px]">
-                      <p className="text-sm truncate" title={row.motif_contestation ?? undefined}>
-                        {row.motif_contestation ?? '—'}
-                      </p>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {row.reponse_contestation ? (
-                        <p className="truncate max-w-[200px]" title={row.reponse_contestation}>
-                          {row.reponse_contestation}
-                        </p>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {!row.reponse_contestation && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openRespond(row)}
-                        >
-                          Répondre
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-          {!loading && list.length === 0 && (
+          ) : list.length === 0 ? (
             <p className="text-muted-foreground py-4">Aucune contestation en cours.</p>
+          ) : (
+            <div className="space-y-3">
+              {list.map((row) => (
+                <div
+                  key={row.id}
+                  className="rounded-xl border border-border/60 p-4 space-y-3 min-w-0"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-medium">
+                        {row.employe.prenom} {row.employe.nom}
+                      </p>
+                      <p className="text-sm break-words leading-snug text-muted-foreground">
+                        {formaterNomKpiAffichage(row.catalogueKpi.nom)}
+                      </p>
+                    </div>
+                    <p className="text-sm shrink-0 text-muted-foreground sm:text-right">
+                      Cible <span className="font-medium text-foreground">{row.cible}</span>
+                      {row.poids > 0 && (
+                        <>
+                          {' · '}
+                          Poids <span className="font-medium text-foreground">{row.poids}%</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-3 min-w-0">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                      Motif de contestation
+                    </p>
+                    <p className="text-sm break-words whitespace-pre-wrap">
+                      {row.motif_contestation ?? '—'}
+                    </p>
+                  </div>
+
+                  {row.reponse_contestation && (
+                    <div className="rounded-lg border border-border/60 p-3 min-w-0">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                        Votre réponse
+                      </p>
+                      <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
+                        {row.reponse_contestation}
+                      </p>
+                    </div>
+                  )}
+
+                  {!row.reponse_contestation && (
+                    <div className="flex justify-end">
+                      <Button variant="outline" size="sm" onClick={() => openRespond(row)}>
+                        Répondre
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

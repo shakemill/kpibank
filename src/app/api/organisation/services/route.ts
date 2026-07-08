@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { serviceCreateSchema } from '@/lib/validations/organisation'
+import { trouverChefService } from '@/lib/service-chef-utils'
 
 export async function GET(request: NextRequest) {
   const result = await getSessionAndRequireDG()
@@ -26,7 +27,33 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { nom: 'asc' },
     })
-    return NextResponse.json(services)
+    const chefs = await prisma.user.findMany({
+      where: {
+        role: 'CHEF_SERVICE',
+        actif: true,
+        serviceId: { in: services.map((s) => s.id) },
+      },
+      select: {
+        id: true,
+        nom: true,
+        prenom: true,
+        email: true,
+        posteOccupe: true,
+        serviceId: true,
+      },
+    })
+    const chefParService = new Map<number, (typeof chefs)[number]>()
+    for (const chef of chefs) {
+      if (chef.serviceId != null && !chefParService.has(chef.serviceId)) {
+        chefParService.set(chef.serviceId, chef)
+      }
+    }
+    return NextResponse.json(
+      services.map((service) => ({
+        ...service,
+        chefService: chefParService.get(service.id) ?? null,
+      })),
+    )
   } catch (e) {
     return NextResponse.json(
       { error: 'Erreur serveur', details: e instanceof Error ? e.message : e },
@@ -60,7 +87,6 @@ export async function POST(request: NextRequest) {
         code: parsed.data.code,
         description: parsed.data.description ?? undefined,
         directionId: parsed.data.directionId,
-        responsableId: parsed.data.responsableId ?? undefined,
       },
       include: {
         direction: { select: { id: true, nom: true, code: true } },
@@ -68,7 +94,8 @@ export async function POST(request: NextRequest) {
         _count: { select: { employes: true } },
       },
     })
-    return NextResponse.json(service)
+    const chefService = await trouverChefService(service.id)
+    return NextResponse.json({ ...service, chefService })
   } catch (e) {
     return NextResponse.json(
       { error: 'Erreur lors de la création', details: e instanceof Error ? e.message : e },

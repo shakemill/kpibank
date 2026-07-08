@@ -42,7 +42,15 @@ import type { DirectionCreateInput, DirectionUpdateInput } from '@/lib/validatio
 import type { ServiceCreateInput, ServiceUpdateInput } from '@/lib/validations/organisation'
 import type { UserCreateInput, UserUpdateInput } from '@/lib/validations/organisation'
 import { Input } from '@/components/ui/input'
-import { Globe, Layers, Users, ChevronRight, Edit, Plus, UserMinus, UserCheck, Trash2, CheckCircle, Ban, ArrowLeft, Copy, Check, Search, ChevronLeft } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { ROLE_OPTIONS, classerCarteUtilisateur, libellerRole } from '@/lib/role-labels'
+import { cn } from '@/lib/utils'
+import { Globe, Layers, Users, ChevronRight, Pencil, Plus, UserMinus, UserCheck, Trash2, CheckCircle, Ban, ArrowLeft, Copy, Check, Search, ChevronLeft, Eye, Mail, type LucideIcon } from 'lucide-react'
 
 type DirectionRow = {
   id: number
@@ -50,8 +58,8 @@ type DirectionRow = {
   code: string
   description: string | null
   actif: boolean
-  responsable: { id: number; nom: string; prenom: string; email: string } | null
-  _count: { services: number }
+  directeurTitulaire: { id: number; nom: string; prenom: string; email: string } | null
+  _count: { services: number; catalogueKpis: number; users: number }
 }
 type ServiceRow = {
   id: number
@@ -61,7 +69,7 @@ type ServiceRow = {
   actif: boolean
   directionId: number
   direction: { id: number; nom: string; code: string }
-  responsable: { id: number; nom: string; prenom: string; email: string } | null
+  chefService: { id: number; nom: string; prenom: string; email: string } | null
   _count: { employes: number }
 }
 type UserRow = {
@@ -70,6 +78,7 @@ type UserRow = {
   prenom: string
   email: string
   telephone: string | null
+  posteOccupe: string | null
   role: string
   actif: boolean
   service: { id: number; nom: string; code: string } | null
@@ -84,6 +93,93 @@ function getInitialTab(searchParams: URLSearchParams): TabValue {
   const t = searchParams.get('tab')
   if (t === 'utilisateurs' || t === 'services' || t === 'directions') return t
   return 'utilisateurs'
+}
+
+function IconActionButton({
+  label,
+  icon: Icon,
+  onClick,
+  href,
+  variant = 'default',
+}: {
+  label: string
+  icon: LucideIcon
+  onClick?: () => void
+  href?: string
+  variant?: 'default' | 'destructive' | 'success'
+}) {
+  const className = cn(
+    'h-8 w-8 shrink-0',
+    variant === 'destructive' && 'text-muted-foreground hover:text-destructive',
+    variant === 'success' && 'text-muted-foreground hover:text-green-600',
+  )
+  const content = <Icon className="h-4 w-4" />
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {href ? (
+          <Button variant="ghost" size="icon" className={className} asChild>
+            <Link href={href}>{content}</Link>
+          </Button>
+        ) : (
+          <Button variant="ghost" size="icon" className={className} onClick={onClick}>
+            {content}
+          </Button>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
+      <dt className="text-sm font-medium text-muted-foreground sm:w-36 shrink-0">{label}</dt>
+      <dd className="text-sm">{value ?? '—'}</dd>
+    </div>
+  )
+}
+
+function CardInfoRow({
+  label,
+  value,
+  labelClassName = 'text-foreground/60',
+  valueClassName = 'text-foreground/85',
+  stacked = false,
+  valueAsBadge = false,
+  badgeClassName = 'bg-primary/10 text-primary',
+}: {
+  label: string
+  value: React.ReactNode
+  labelClassName?: string
+  valueClassName?: string
+  stacked?: boolean
+  valueAsBadge?: boolean
+  badgeClassName?: string
+}) {
+  const valueEl = valueAsBadge ? (
+    <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${badgeClassName}`}>
+      {value ?? '—'}
+    </span>
+  ) : (
+    <span className={valueClassName}>{value ?? '—'}</span>
+  )
+
+  if (stacked) {
+    return (
+      <div className="text-xs leading-relaxed">
+        <p className={`font-semibold ${labelClassName}`}>{label} :</p>
+        <div className={`mt-0.5 break-words ${valueAsBadge ? '' : valueClassName}`}>{valueEl}</div>
+      </div>
+    )
+  }
+  return (
+    <p className="text-xs leading-relaxed break-words">
+      <span className={`font-semibold ${labelClassName}`}>{label} :</span>{' '}
+      {valueEl}
+    </p>
+  )
 }
 
 export default function OrganisationPage() {
@@ -107,7 +203,6 @@ export default function OrganisationPage() {
   const USER_PAGE_SIZE = 12
 
   const [modal, setModal] = useState<'direction' | 'service' | 'user' | null>(null)
-  const [editDirection, setEditDirection] = useState<DirectionRow | null>(null)
   const [editService, setEditService] = useState<ServiceRow | null>(null)
   const [editUser, setEditUser] = useState<UserRow | null>(null)
   const [tempPassword, setTempPassword] = useState<string | null>(null)
@@ -124,7 +219,13 @@ export default function OrganisationPage() {
     | { kind: 'disable_user'; user: UserRow }
     | { kind: 'activate_user'; user: UserRow }
     | { kind: 'delete_user'; user: UserRow }
+    | { kind: 'resend_password_user'; user: UserRow }
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
+  const [viewTarget, setViewTarget] = useState<
+    | { kind: 'service'; data: ServiceRow }
+    | { kind: 'user'; data: UserRow }
+    | null
+  >(null)
 
   const fetchDirections = useCallback(async () => {
     const params = new URLSearchParams()
@@ -194,11 +295,6 @@ export default function OrganisationPage() {
   }, [fetchDirections, fetchServices, fetchUsers, fetchUsersForSelect])
 
   const openNewDirection = () => {
-    setEditDirection(null)
-    setModal('direction')
-  }
-  const openEditDirection = (row: DirectionRow) => {
-    setEditDirection(row)
     setModal('direction')
   }
   const openNewService = () => {
@@ -232,33 +328,18 @@ export default function OrganisationPage() {
   const serviceOptions = services.map((s) => ({ id: s.id, nom: s.nom, code: s.code, directionId: s.directionId }))
 
   const handleDirectionSubmit = async (values: DirectionCreateInput | DirectionUpdateInput) => {
-    if (editDirection) {
-      const res = await fetch(`/api/organisation/directions/${editDirection.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast({ title: 'Erreur', description: data?.error ?? 'Échec mise à jour', variant: 'destructive' })
-        return
-      }
-      toast({ title: 'Direction mise à jour' })
-    } else {
-      const res = await fetch('/api/organisation/directions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast({ title: 'Erreur', description: data?.error ?? 'Échec création', variant: 'destructive' })
-        return
-      }
-      toast({ title: 'Direction créée' })
+    const res = await fetch('/api/organisation/directions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast({ title: 'Erreur', description: data?.error ?? 'Échec création', variant: 'destructive' })
+      return
     }
+    toast({ title: 'Direction créée' })
     setModal(null)
-    setEditDirection(null)
     fetchDirections()
   }
 
@@ -274,7 +355,7 @@ export default function OrganisationPage() {
         toast({ title: 'Erreur', description: data?.error ?? 'Échec mise à jour', variant: 'destructive' })
         return
       }
-      toast({ title: 'Service mis à jour' })
+      toast({ title: 'Département / agence mis à jour' })
     } else {
       const res = await fetch('/api/organisation/services', {
         method: 'POST',
@@ -286,7 +367,7 @@ export default function OrganisationPage() {
         toast({ title: 'Erreur', description: data?.error ?? 'Échec création', variant: 'destructive' })
         return
       }
-      toast({ title: 'Service créé' })
+      toast({ title: 'Département / agence créé' })
     }
     setModal(null)
     setEditService(null)
@@ -295,14 +376,26 @@ export default function OrganisationPage() {
 
   const handleUserSubmit = async (values: UserCreateInput | UserUpdateInput) => {
     if (editUser) {
+      const payload = { ...values } as UserUpdateInput
+      if (!payload.password?.trim()) delete payload.password
+
       const res = await fetch(`/api/utilisateurs/${editUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast({ title: 'Erreur', description: data?.error ?? 'Échec mise à jour', variant: 'destructive' })
+        const details = data?.details?.fieldErrors
+          ? Object.entries(data.details.fieldErrors as Record<string, string[]>)
+              .flatMap(([k, v]) => v.map((m) => `${k}: ${m}`))
+              .join(' · ')
+          : null
+        toast({
+          title: 'Erreur',
+          description: details || data?.error || (typeof data?.details === 'string' ? data.details : null) || 'Échec mise à jour',
+          variant: 'destructive',
+        })
         return
       }
       toast({ title: 'Utilisateur mis à jour' })
@@ -376,7 +469,7 @@ export default function OrganisationPage() {
         toast({ title: 'Erreur', description: data?.error ?? 'Échec', variant: 'destructive' })
         return
       }
-      toast({ title: 'Service désactivé' })
+      toast({ title: 'Département / agence désactivé' })
       fetchServices()
     } else if (action.kind === 'activate_service') {
       const res = await fetch(`/api/organisation/services/${action.service.id}`, {
@@ -389,7 +482,7 @@ export default function OrganisationPage() {
         toast({ title: 'Erreur', description: data?.error ?? 'Échec', variant: 'destructive' })
         return
       }
-      toast({ title: 'Service activé' })
+      toast({ title: 'Département / agence activé' })
       fetchServices()
     } else if (action.kind === 'delete_service') {
       const res = await fetch(`/api/organisation/services/${action.service.id}/supprimer`, { method: 'DELETE' })
@@ -398,7 +491,7 @@ export default function OrganisationPage() {
         toast({ title: 'Erreur', description: data?.error ?? 'Échec', variant: 'destructive' })
         return
       }
-      toast({ title: 'Service supprimé' })
+      toast({ title: 'Département / agence supprimé' })
       fetchServices()
     } else if (action.kind === 'disable_user') {
       const res = await fetch(`/api/utilisateurs/${action.user.id}/desactiver`, { method: 'PUT' })
@@ -430,6 +523,19 @@ export default function OrganisationPage() {
       toast({ title: 'Utilisateur supprimé' })
       fetchUsers()
       fetchUsersForSelect()
+    } else if (action.kind === 'resend_password_user') {
+      const res = await fetch(`/api/utilisateurs/${action.user.id}/renvoyer-mot-de-passe`, {
+        method: 'POST',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast({ title: 'Erreur', description: data?.error ?? 'Échec de l\'envoi', variant: 'destructive' })
+        return
+      }
+      toast({
+        title: 'Mot de passe envoyé',
+        description: data?.message ?? `Un nouveau mot de passe a été envoyé à ${action.user.email}.`,
+      })
     }
   }
 
@@ -452,27 +558,27 @@ export default function OrganisationPage() {
       case 'delete_direction':
         return {
           title: 'Supprimer la direction',
-          description: `Voulez-vous vraiment supprimer définitivement la direction « ${confirmAction.direction.nom } » (${confirmAction.direction.code}) ? Les services associés seront également supprimés. Cette action est irréversible.`,
+          description: `Voulez-vous vraiment supprimer définitivement la direction « ${confirmAction.direction.nom } » (${confirmAction.direction.code}) ? Les départements/agences associés seront également supprimés. Cette action est irréversible.`,
           confirmLabel: 'Supprimer',
           destructive: true,
         }
       case 'disable_service':
         return {
-          title: 'Désactiver le service',
-          description: `Voulez-vous vraiment désactiver le service « ${confirmAction.service.nom } » (${confirmAction.service.code}) ?`,
+          title: 'Désactiver le département / agence',
+          description: `Voulez-vous vraiment désactiver « ${confirmAction.service.nom } » (${confirmAction.service.code}) ?`,
           confirmLabel: 'Désactiver',
           destructive: true,
         }
       case 'activate_service':
         return {
-          title: 'Activer le service',
-          description: `Voulez-vous réactiver le service « ${confirmAction.service.nom } » (${confirmAction.service.code}) ?`,
+          title: 'Activer le département / agence',
+          description: `Voulez-vous réactiver « ${confirmAction.service.nom } » (${confirmAction.service.code}) ?`,
           confirmLabel: 'Activer',
         }
       case 'delete_service':
         return {
-          title: 'Supprimer le service',
-          description: `Voulez-vous vraiment supprimer définitivement le service « ${confirmAction.service.nom } » (${confirmAction.service.code}) ? Les KPI et données associés seront supprimés. Cette action est irréversible.`,
+          title: 'Supprimer le département / agence',
+          description: `Voulez-vous vraiment supprimer définitivement « ${confirmAction.service.nom } » (${confirmAction.service.code}) ? Les KPI et données associés seront supprimés. Cette action est irréversible.`,
           confirmLabel: 'Supprimer',
           destructive: true,
         }
@@ -496,6 +602,14 @@ export default function OrganisationPage() {
           confirmLabel: 'Supprimer',
           destructive: true,
         }
+      case 'resend_password_user': {
+        const nomComplet = [confirmAction.user.prenom, confirmAction.user.nom].filter(Boolean).join(' ') || confirmAction.user.email
+        return {
+          title: 'Renvoyer le mot de passe',
+          description: `Un nouveau mot de passe temporaire sera généré et envoyé par email à « ${nomComplet} » (${confirmAction.user.email}). L'ancien mot de passe ne sera plus valide.`,
+          confirmLabel: 'Envoyer par email',
+        }
+      }
       default:
         return null
     }
@@ -507,7 +621,10 @@ export default function OrganisationPage() {
       icon: Globe,
       title: 'Directions',
       description: 'Structure des directions',
-      details: 'Gérer les directions, leurs responsables et le nombre de services rattachés.',
+      details: 'Gérer les directions, leurs responsables, départements/agences, KPI et utilisateurs.',
+      cardClass: 'bg-sky-50/90 dark:bg-sky-950/25 border-sky-200/70 dark:border-sky-800/50',
+      iconClass: 'text-sky-700 dark:text-sky-400',
+      iconBgClass: 'bg-sky-100 dark:bg-sky-900/50',
       actions: [
         { icon: Plus, label: 'Nouvelle direction', onClick: (e: React.MouseEvent) => { e.stopPropagation(); openNewDirection() } },
       ],
@@ -515,11 +632,14 @@ export default function OrganisationPage() {
     {
       id: 'services' as TabValue,
       icon: Layers,
-      title: 'Services',
-      description: 'Services par direction',
-      details: 'Créer et modifier les services, les associer à une direction et un responsable.',
+      title: 'Département / Agence',
+      description: 'Départements et agences par direction',
+      details: 'Créer et modifier les départements ou agences, les associer à une direction et un responsable.',
+      cardClass: 'bg-violet-50/90 dark:bg-violet-950/25 border-violet-200/70 dark:border-violet-800/50',
+      iconClass: 'text-violet-700 dark:text-violet-400',
+      iconBgClass: 'bg-violet-100 dark:bg-violet-900/50',
       actions: [
-        { icon: Plus, label: 'Nouveau service', onClick: (e: React.MouseEvent) => { e.stopPropagation(); openNewService() } },
+        { icon: Plus, label: 'Nouveau département / agence', onClick: (e: React.MouseEvent) => { e.stopPropagation(); openNewService() } },
       ],
     },
     {
@@ -528,6 +648,9 @@ export default function OrganisationPage() {
       title: 'Utilisateurs',
       description: 'Comptes et rôles',
       details: 'Gérer les utilisateurs, les rôles, affectations et activer ou désactiver les comptes.',
+      cardClass: 'bg-emerald-50/90 dark:bg-emerald-950/25 border-emerald-200/70 dark:border-emerald-800/50',
+      iconClass: 'text-emerald-700 dark:text-emerald-400',
+      iconBgClass: 'bg-emerald-100 dark:bg-emerald-900/50',
       actions: [
         { icon: Plus, label: 'Nouvel utilisateur', onClick: (e: React.MouseEvent) => { e.stopPropagation(); openNewUser() } },
       ],
@@ -535,6 +658,7 @@ export default function OrganisationPage() {
   ]
 
   return (
+    <TooltipProvider>
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-3">
         <Button variant="ghost" size="sm" className="w-fit gap-2 -ml-2" asChild>
@@ -543,11 +667,16 @@ export default function OrganisationPage() {
             Retour à la configuration
           </Link>
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gestion de l&apos;organisation</h1>
-          <p className="text-muted-foreground mt-1">
-            Directions, services et utilisateurs
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 shadow-sm shrink-0">
+            <Globe className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gestion de l&apos;organisation</h1>
+            <p className="text-muted-foreground mt-0.5">
+              Directions, départements/agences et utilisateurs
+            </p>
+          </div>
         </div>
       </div>
 
@@ -555,18 +684,18 @@ export default function OrganisationPage() {
         {sectionCards.map((section) => (
           <Card
             key={section.id}
-            className={`group transition-all duration-300 border-border/50 cursor-pointer ${
+            className={`group transition-all duration-300 cursor-pointer ${section.cardClass} ${
               tab === section.id
-                ? 'ring-2 ring-primary border-primary/30 shadow-md'
-                : 'hover:shadow-xl hover:border-primary/20'
+                ? 'ring-2 ring-primary shadow-md'
+                : 'hover:shadow-xl hover:brightness-[0.98] dark:hover:brightness-110'
             }`}
             onClick={() => setTab(section.id)}
           >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3 flex-1">
-                  <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <section.icon className="h-5 w-5 text-primary" />
+                  <div className={`h-11 w-11 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${section.iconBgClass}`}>
+                    <section.icon className={`h-5 w-5 ${section.iconClass}`} />
                   </div>
                   <div className="flex-1">
                     <CardTitle className="text-base leading-tight group-hover:text-primary transition-colors">
@@ -645,31 +774,50 @@ export default function OrganisationPage() {
                     </CardHeader>
                     <CardContent className="space-y-3 pt-0">
                       <p className="text-xs text-muted-foreground">
-                        Responsable : {d.responsable ? `${d.responsable.prenom} ${d.responsable.nom}` : '—'}
+                        Directeur titulaire :{' '}
+                        {d.directeurTitulaire
+                          ? `${d.directeurTitulaire.prenom} ${d.directeurTitulaire.nom}`.trim()
+                          : '—'}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {d._count.services} service{d._count.services !== 1 ? 's' : ''}
+                        {d._count.services} département{d._count.services !== 1 ? 's' : ''}
+                        {' · '}
+                        {d._count.catalogueKpis ?? 0} KPI
+                        {' · '}
+                        {d._count.users ?? 0} utilisateur{(d._count.users ?? 0) !== 1 ? 's' : ''}
                       </p>
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        <Button variant="outline" size="sm" className="gap-1" onClick={() => openEditDirection(d)}>
-                          <Edit className="h-3.5 w-3.5" />
-                          Éditer
-                        </Button>
+                      <div className="flex items-center gap-0.5 pt-2">
+                        <IconActionButton
+                          label="Consulter"
+                          icon={Eye}
+                          href={`/organisation/directions/${d.id}`}
+                        />
+                        <IconActionButton
+                          label="Éditer"
+                          icon={Pencil}
+                          href={`/organisation/directions/${d.id}/edit`}
+                        />
                         {d.actif ? (
-                          <Button variant="outline" size="sm" className="gap-1" onClick={() => setConfirmAction({ kind: 'disable_direction', direction: d })}>
-                            <Ban className="h-3.5 w-3.5" />
-                            Désactiver
-                          </Button>
+                          <IconActionButton
+                            label="Désactiver"
+                            icon={Ban}
+                            variant="destructive"
+                            onClick={() => setConfirmAction({ kind: 'disable_direction', direction: d })}
+                          />
                         ) : (
-                          <Button variant="outline" size="sm" className="gap-1" onClick={() => setConfirmAction({ kind: 'activate_direction', direction: d })}>
-                            <CheckCircle className="h-3.5 w-3.5" />
-                            Activer
-                          </Button>
+                          <IconActionButton
+                            label="Activer"
+                            icon={CheckCircle}
+                            variant="success"
+                            onClick={() => setConfirmAction({ kind: 'activate_direction', direction: d })}
+                          />
                         )}
-                        <Button variant="outline" size="sm" className="gap-1 text-destructive hover:text-destructive" onClick={() => setConfirmAction({ kind: 'delete_direction', direction: d })}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Supprimer
-                        </Button>
+                        <IconActionButton
+                          label="Supprimer"
+                          icon={Trash2}
+                          variant="destructive"
+                          onClick={() => setConfirmAction({ kind: 'delete_direction', direction: d })}
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -705,7 +853,7 @@ export default function OrganisationPage() {
               </Select>
               <Button onClick={openNewService} className="gap-2">
                 <Plus className="h-4 w-4" />
-                Nouveau service
+                Nouveau département / agence
               </Button>
             </div>
             {loading ? (
@@ -733,31 +881,46 @@ export default function OrganisationPage() {
                         Direction : {s.direction.nom}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Responsable : {s.responsable ? `${s.responsable.prenom} ${s.responsable.nom}` : '—'}
+                        Chef département / agence :{' '}
+                        {s.chefService
+                          ? `${s.chefService.prenom} ${s.chefService.nom}`.trim()
+                          : '—'}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {s._count.employes} employé{s._count.employes !== 1 ? 's' : ''}
                       </p>
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        <Button variant="outline" size="sm" className="gap-1" onClick={() => openEditService(s)}>
-                          <Edit className="h-3.5 w-3.5" />
-                          Éditer
-                        </Button>
+                      <div className="flex items-center gap-0.5 pt-2">
+                        <IconActionButton
+                          label="Consulter"
+                          icon={Eye}
+                          onClick={() => setViewTarget({ kind: 'service', data: s })}
+                        />
+                        <IconActionButton
+                          label="Éditer"
+                          icon={Pencil}
+                          onClick={() => openEditService(s)}
+                        />
                         {s.actif ? (
-                          <Button variant="outline" size="sm" className="gap-1" onClick={() => setConfirmAction({ kind: 'disable_service', service: s })}>
-                            <Ban className="h-3.5 w-3.5" />
-                            Désactiver
-                          </Button>
+                          <IconActionButton
+                            label="Désactiver"
+                            icon={Ban}
+                            variant="destructive"
+                            onClick={() => setConfirmAction({ kind: 'disable_service', service: s })}
+                          />
                         ) : (
-                          <Button variant="outline" size="sm" className="gap-1" onClick={() => setConfirmAction({ kind: 'activate_service', service: s })}>
-                            <CheckCircle className="h-3.5 w-3.5" />
-                            Activer
-                          </Button>
+                          <IconActionButton
+                            label="Activer"
+                            icon={CheckCircle}
+                            variant="success"
+                            onClick={() => setConfirmAction({ kind: 'activate_service', service: s })}
+                          />
                         )}
-                        <Button variant="outline" size="sm" className="gap-1 text-destructive hover:text-destructive" onClick={() => setConfirmAction({ kind: 'delete_service', service: s })}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Supprimer
-                        </Button>
+                        <IconActionButton
+                          label="Supprimer"
+                          icon={Trash2}
+                          variant="destructive"
+                          onClick={() => setConfirmAction({ kind: 'delete_service', service: s })}
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -794,11 +957,9 @@ export default function OrganisationPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous</SelectItem>
-                  <SelectItem value="DG">DG</SelectItem>
-                  <SelectItem value="DIRECTEUR">Directeur</SelectItem>
-                  <SelectItem value="CHEF_SERVICE">Chef de service</SelectItem>
-                  <SelectItem value="MANAGER">Manager</SelectItem>
-                  <SelectItem value="EMPLOYE">Employé</SelectItem>
+                  {ROLE_OPTIONS.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select
@@ -845,45 +1006,83 @@ export default function OrganisationPage() {
               <>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {users.map((u) => (
-                  <Card key={u.id} className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/20">
+                  <Card key={u.id} className={`group gap-0 hover:shadow-lg transition-all duration-300 ${classerCarteUtilisateur(u.role)}`}>
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <CardTitle className="text-base font-bold">{u.prenom} {u.nom}</CardTitle>
-                          <CardDescription className="text-xs truncate">{u.email}</CardDescription>
+                        <div className="min-w-0 flex-1">
+                          <CardTitle className="text-base font-bold leading-snug">{[u.prenom, u.nom].filter(Boolean).join(' ')}</CardTitle>
+                          {u.posteOccupe?.trim() && (
+                            <p className="text-xs text-black dark:text-neutral-100 leading-relaxed break-words mt-1">
+                              {u.posteOccupe.trim()}
+                            </p>
+                          )}
+                          <CardDescription className="text-xs mt-1 break-all">{u.email}</CardDescription>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${u.actif ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
                           {u.actif ? 'Actif' : 'Inactif'}
                         </span>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3 pt-0">
-                      <p className="text-xs text-muted-foreground">
-                        Rôle : {u.role}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {u.service ? u.service.nom : u.direction ? u.direction.nom : '—'}
-                      </p>
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        <Button variant="outline" size="sm" className="gap-1" onClick={() => openEditUser(u)}>
-                          <Edit className="h-3.5 w-3.5" />
-                          Éditer
-                        </Button>
-                        {u.actif ? (
-                          <Button variant="outline" size="sm" className="gap-1" onClick={() => setConfirmAction({ kind: 'disable_user', user: u })}>
-                            <UserMinus className="h-3.5 w-3.5" />
-                            Désactiver
-                          </Button>
-                        ) : (
-                          <Button variant="outline" size="sm" className="gap-1" onClick={() => setConfirmAction({ kind: 'activate_user', user: u })}>
-                            <UserCheck className="h-3.5 w-3.5" />
-                            Activer
-                          </Button>
+                    <CardContent className="space-y-2 border-t border-border/50 pt-2">
+                      <dl className="space-y-2">
+                        <CardInfoRow
+                          label="Rôle"
+                          value={libellerRole(u.role)}
+                          labelClassName="text-gray-700 dark:text-gray-300"
+                          valueAsBadge
+                          badgeClassName="bg-primary/10 text-primary"
+                        />
+                        <CardInfoRow
+                          label={u.service ? 'Département / Agence' : 'Direction'}
+                          value={
+                            u.service
+                              ? u.service.nom.trim()
+                              : u.direction?.nom?.trim() ?? '—'
+                          }
+                          stacked={!!u.service}
+                          labelClassName="text-indigo-700/85 dark:text-indigo-400/90"
+                          valueClassName="text-indigo-950/85 dark:text-indigo-100/90 font-medium"
+                        />
+                      </dl>
+                      <div className="flex items-center gap-0.5 border-t border-border/50 pt-2">
+                        <IconActionButton
+                          label="Consulter"
+                          icon={Eye}
+                          onClick={() => setViewTarget({ kind: 'user', data: u })}
+                        />
+                        <IconActionButton
+                          label="Éditer"
+                          icon={Pencil}
+                          onClick={() => openEditUser(u)}
+                        />
+                        {u.actif && (
+                          <IconActionButton
+                            label="Renvoyer le mot de passe par email"
+                            icon={Mail}
+                            onClick={() => setConfirmAction({ kind: 'resend_password_user', user: u })}
+                          />
                         )}
-                        <Button variant="outline" size="sm" className="gap-1 text-destructive hover:text-destructive" onClick={() => setConfirmAction({ kind: 'delete_user', user: u })}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Supprimer
-                        </Button>
+                        {u.actif ? (
+                          <IconActionButton
+                            label="Désactiver"
+                            icon={UserMinus}
+                            variant="destructive"
+                            onClick={() => setConfirmAction({ kind: 'disable_user', user: u })}
+                          />
+                        ) : (
+                          <IconActionButton
+                            label="Activer"
+                            icon={UserCheck}
+                            variant="success"
+                            onClick={() => setConfirmAction({ kind: 'activate_user', user: u })}
+                          />
+                        )}
+                        <IconActionButton
+                          label="Supprimer"
+                          icon={Trash2}
+                          variant="destructive"
+                          onClick={() => setConfirmAction({ kind: 'delete_user', user: u })}
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -928,29 +1127,96 @@ export default function OrganisationPage() {
         )}
       </div>
 
+      <Dialog open={!!viewTarget} onOpenChange={(open) => !open && setViewTarget(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {viewTarget?.kind === 'service' && 'Détail du département / agence'}
+              {viewTarget?.kind === 'user' && 'Détail de l\'utilisateur'}
+            </DialogTitle>
+          </DialogHeader>
+          {viewTarget?.kind === 'service' && (
+            <dl className="space-y-3 py-2">
+              <DetailRow label="Nom" value={viewTarget.data.nom} />
+              <DetailRow label="Code" value={viewTarget.data.code} />
+              <DetailRow label="Description" value={viewTarget.data.description || '—'} />
+              <DetailRow label="Direction" value={`${viewTarget.data.direction.nom} (${viewTarget.data.direction.code})`} />
+              <DetailRow
+                label="Chef département / agence"
+                value={
+                  viewTarget.data.chefService
+                    ? `${viewTarget.data.chefService.prenom} ${viewTarget.data.chefService.nom} (${viewTarget.data.chefService.email})`
+                    : '—'
+                }
+              />
+              <DetailRow
+                label="Employés"
+                value={`${viewTarget.data._count.employes} employé${viewTarget.data._count.employes !== 1 ? 's' : ''}`}
+              />
+              <DetailRow
+                label="Statut"
+                value={
+                  <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${viewTarget.data.actif ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
+                    {viewTarget.data.actif ? 'Actif' : 'Inactif'}
+                  </span>
+                }
+              />
+            </dl>
+          )}
+          {viewTarget?.kind === 'user' && (
+            <dl className="space-y-3 py-2">
+              <DetailRow label="Nom complet" value={[viewTarget.data.prenom, viewTarget.data.nom].filter(Boolean).join(' ') || '—'} />
+              <DetailRow label="Email" value={viewTarget.data.email} />
+              <DetailRow label="Téléphone" value={viewTarget.data.telephone || '—'} />
+              <DetailRow label="Fonction" value={viewTarget.data.posteOccupe?.trim() || '—'} />
+              <DetailRow label="Rôle" value={libellerRole(viewTarget.data.role)} />
+              <DetailRow
+                label="Direction"
+                value={viewTarget.data.direction ? `${viewTarget.data.direction.nom} (${viewTarget.data.direction.code})` : '—'}
+              />
+              <DetailRow
+                label="Département / Agence"
+                value={viewTarget.data.service ? `${viewTarget.data.service.nom} (${viewTarget.data.service.code})` : '—'}
+              />
+              <DetailRow
+                label="Manager"
+                value={
+                  viewTarget.data.manager
+                    ? `${viewTarget.data.manager.prenom} ${viewTarget.data.manager.nom} (${viewTarget.data.manager.email})`
+                    : '—'
+                }
+              />
+              <DetailRow
+                label="Statut"
+                value={
+                  <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${viewTarget.data.actif ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
+                    {viewTarget.data.actif ? 'Actif' : 'Inactif'}
+                  </span>
+                }
+              />
+            </dl>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={modal === 'direction'} onOpenChange={(open) => !open && setModal(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editDirection ? 'Modifier la direction' : 'Nouvelle direction'}</DialogTitle>
+            <DialogTitle>Nouvelle direction</DialogTitle>
           </DialogHeader>
-          <DirectionForm
-            defaultValues={editDirection ? { nom: editDirection.nom, code: editDirection.code, description: editDirection.description ?? '', responsableId: editDirection.responsable?.id } : undefined}
-            users={userOptions}
-            onSubmit={handleDirectionSubmit}
-            isEdit={!!editDirection}
-          />
+          <DirectionForm onSubmit={handleDirectionSubmit} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={modal === 'service'} onOpenChange={(open) => !open && setModal(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editService ? 'Modifier le service' : 'Nouveau service'}</DialogTitle>
+            <DialogTitle>{editService ? 'Modifier le département / agence' : 'Nouveau département / agence'}</DialogTitle>
           </DialogHeader>
           <ServiceForm
-            defaultValues={editService ? { nom: editService.nom, code: editService.code, description: editService.description ?? '', directionId: editService.directionId, responsableId: editService.responsable?.id } : undefined}
+            defaultValues={editService ? { nom: editService.nom, code: editService.code, description: editService.description ?? '', directionId: editService.directionId } : undefined}
             directions={directionOptions}
-            users={userOptions}
+            chefService={editService?.chefService ?? null}
             onSubmit={handleServiceSubmit}
             isEdit={!!editService}
           />
@@ -958,12 +1224,22 @@ export default function OrganisationPage() {
       </Dialog>
 
       <Dialog open={modal === 'user'} onOpenChange={(open) => !open && (setModal(null), setTempPassword(null))}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{editUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur'}</DialogTitle>
           </DialogHeader>
           <UserForm
-            defaultValues={editUser ? { nom: editUser.nom, prenom: editUser.prenom, email: editUser.email, telephone: editUser.telephone ?? '', role: editUser.role as UserCreateInput['role'], directionId: editUser.direction?.id ?? undefined, serviceId: editUser.service?.id ?? undefined, managerId: editUser.manager?.id } : undefined}
+            defaultValues={editUser ? {
+              nom: editUser.nom,
+              prenom: editUser.prenom,
+              email: editUser.email,
+              telephone: editUser.telephone ?? '',
+              posteOccupe: editUser.posteOccupe ?? '',
+              role: editUser.role as UserCreateInput['role'],
+              directionId: editUser.service ? undefined : (editUser.direction?.id ?? undefined),
+              serviceId: editUser.service?.id ?? undefined,
+              managerId: editUser.manager?.id,
+            } : undefined}
             directions={directionOptions}
             services={serviceOptions}
             users={userOptions}
@@ -1060,5 +1336,6 @@ export default function OrganisationPage() {
         )
       })()}
     </div>
+    </TooltipProvider>
   )
 }

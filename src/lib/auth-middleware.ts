@@ -37,7 +37,8 @@ const nextAuth = NextAuth({
       const path = request.nextUrl.pathname
       const isLogin = path === '/login'
       const isAuthApi = path.startsWith('/api/auth')
-      if (isLogin || isAuthApi) return true
+      const isCronApi = path.startsWith('/api/cron')
+      if (isLogin || isAuthApi || isCronApi) return true
       if (!session?.user) return NextResponse.redirect(new URL('/login', request.url))
       const role = (session.user as { role?: string }).role ?? ''
       const dashboard = ROLE_DASHBOARD[role] ?? '/dashboard/employe'

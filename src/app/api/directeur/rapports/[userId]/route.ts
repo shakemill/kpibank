@@ -3,7 +3,13 @@ import { getSessionAndRequireDirecteur } from '@/lib/api-auth'
 import { canAccessEmployeData } from '@/lib/access-control'
 import { prisma } from '@/lib/prisma'
 import { consolidateEmploye } from '@/lib/consolidation'
-import { calculerTauxAtteinte, type TypeKpi } from '@/lib/saisie-utils'
+import { getNotationGrille } from '@/lib/notation-grille'
+import { loadNotationGrilleConfig } from '@/lib/notation-grille-server'
+import {
+  calculerScoreParMois,
+  enrichirRealisationsParMois,
+  listerMoisPeriode,
+} from '@/lib/kpi-realisations'
 
 async function getPeriodeIdOrDefault(periodeIdParam: string | null): Promise<number | null> {
   if (periodeIdParam) {
@@ -90,23 +96,56 @@ export async function GET(
 
     let detailPeriode: {
       scoreGlobal: number
-      details: { nom: string; type: string; cible: number; realise: number; taux: number; statut: string }[]
-    } = { scoreGlobal: 0, details: [] }
+      details: { nom: string; type: string; cible: number; realise: number; taux: number; poids: number; statut: string }[]
+      appreciation: string
+      commentaire: string
+    } = { scoreGlobal: 0, details: [], appreciation: '', commentaire: '' }
     let comparaisonVsPrecedent: number | null = null
     const evolution: { periodeId: number; code: string; scoreGlobal: number }[] = []
     let scoreParMois: { mois: number; annee: number; label: string; scorePct: number }[] = []
+    let moisPeriode: { mois: number; annee: number; label: string }[] = []
+    let kpiParMois: {
+      kpiEmployeId: number
+      nom: string
+      cible: number
+      unite: string | null
+      tauxPeriode: number | null
+      realisePeriode: number | null
+      realisations_par_mois: {
+        mois: number
+        valeur: number | null
+        statut: string | null
+        taux: number | null
+      }[]
+    }[] = []
 
     try {
       const res = await consolidateEmploye(userId, periodeId)
+      const scoreGlobal = Math.round(res.scoreGlobal * 100) / 100
+      const grilleConfig = await loadNotationGrilleConfig()
+      const notation = getNotationGrille(scoreGlobal, grilleConfig)
+      const kpiMeta = await prisma.kpiEmploye.findMany({
+        where: { employeId: userId, periodeId },
+        select: {
+          id: true,
+          statut: true,
+          catalogueKpi: { select: { type: true } },
+        },
+      })
+      const metaById = new Map(kpiMeta.map((k) => [k.id, k]))
+
       detailPeriode = {
-        scoreGlobal: Math.round(res.scoreGlobal * 100) / 100,
+        scoreGlobal,
+        appreciation: notation.appreciation,
+        commentaire: notation.commentaire,
         details: res.details.map((d) => ({
           nom: d.nom,
-          type: '',
+          type: metaById.get(d.kpiEmployeId)?.catalogueKpi.type ?? '',
           cible: d.cible,
           realise: Math.round(d.valeurAgregee * 100) / 100,
           taux: Math.round(d.tauxAtteinte * 100) / 100,
-          statut: 'VALIDE',
+          poids: d.poids,
+          statut: metaById.get(d.kpiEmployeId)?.statut ?? 'VALIDE',
         })),
       }
       const idx = periodes.findIndex((p) => p.id === periodeId)
@@ -150,45 +189,61 @@ export async function GET(
     }
 
     if (periodeSelected) {
+      const periodePourReal = {
+        mois_debut: periodeSelected.mois_debut,
+        mois_fin: periodeSelected.mois_fin,
+        annee: periodeSelected.annee,
+      }
+      moisPeriode = listerMoisPeriode(periodePourReal)
+
       const kpiEmployes = await prisma.kpiEmploye.findMany({
         where: { employeId: userId, periodeId },
-        select: { id: true, cible: true, poids: true, catalogueKpi: { select: { type: true } } },
+        select: {
+          id: true,
+          cible: true,
+          poids: true,
+          catalogueKpi: {
+            select: { nom: true, type: true, sens_calcul: true, mode_agregation: true, unite: true },
+          },
+        },
       })
       const kpiIds = kpiEmployes.map((k) => k.id)
       const saisies = await prisma.saisieMensuelle.findMany({
         where: {
           kpiEmployeId: { in: kpiIds },
-          statut: { in: ['VALIDEE', 'AJUSTEE'] },
           mois: { gte: periodeSelected.mois_debut, lte: periodeSelected.mois_fin },
           annee: periodeSelected.annee,
         },
-        select: { kpiEmployeId: true, mois: true, annee: true, valeur_realisee: true, valeur_ajustee: true },
+        select: {
+          kpiEmployeId: true,
+          mois: true,
+          valeur_realisee: true,
+          valeur_ajustee: true,
+          statut: true,
+        },
       })
-      const moisDebut = periodeSelected.mois_debut
-      const moisFin = periodeSelected.mois_fin
-      const annee = periodeSelected.annee
-      for (let m = moisDebut; m <= moisFin; m++) {
-        let sumPonds = 0
-        let sumPoids = 0
-        for (const ke of kpiEmployes) {
-          const s = saisies.find(
-            (x) => x.kpiEmployeId === ke.id && x.mois === m && x.annee === annee
-          )
-          const valeur = s ? (s.valeur_ajustee ?? s.valeur_realisee) : null
-          if (valeur == null || Number.isNaN(valeur)) continue
-          const typeKpi = (ke.catalogueKpi?.type ?? 'QUANTITATIF') as TypeKpi
-          const taux = calculerTauxAtteinte(valeur, ke.cible, typeKpi) / 100
-          sumPonds += taux * ke.poids
-          sumPoids += ke.poids
-        }
-        const scorePct = sumPoids > 0 ? Math.round((sumPonds / sumPoids) * 1000) / 10 : 0
-        scoreParMois.push({
-          mois: m,
-          annee,
-          label: `${MOIS_LABELS[m]} ${annee}`,
-          scorePct,
+      const saisiesValidees = saisies.filter((s) => ['VALIDEE', 'AJUSTEE'].includes(s.statut))
+      scoreParMois = calculerScoreParMois(kpiEmployes, saisiesValidees, periodePourReal).map(
+        (s) => ({
+          ...s,
+          label: `${MOIS_LABELS[s.mois]} ${s.annee}`,
         })
-      }
+      )
+
+      const kpiAvecMois = enrichirRealisationsParMois(kpiEmployes, saisies, periodePourReal)
+      const detailByNom = new Map(detailPeriode.details.map((d) => [d.nom, d]))
+      kpiParMois = kpiAvecMois.map((k) => {
+        const detail = detailByNom.get(k.catalogueKpi.nom)
+        return {
+          kpiEmployeId: k.id,
+          nom: k.catalogueKpi.nom,
+          cible: k.cible,
+          unite: k.catalogueKpi.unite,
+          tauxPeriode: detail?.taux ?? null,
+          realisePeriode: detail?.realise ?? null,
+          realisations_par_mois: k.realisations_par_mois,
+        }
+      })
     }
 
     return NextResponse.json({
@@ -199,6 +254,8 @@ export async function GET(
       comparaisonVsPrecedent,
       evolution,
       scoreParMois,
+      moisPeriode,
+      kpiParMois,
       periodes: periodes.map((p) => ({ id: p.id, code: p.code })),
     })
   } catch (e) {

@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { consolidateEmploye } from '@/lib/consolidation'
+import { getCollaborateursAssignables } from '@/lib/assignation-rules'
+
+function perimetreLabel(role: string): string {
+  switch (role) {
+    case 'DG':
+      return "Tous les collaborateurs de l'organisation"
+    case 'DIRECTEUR':
+      return 'Collaborateurs de votre direction'
+    case 'CHEF_SERVICE':
+      return 'Collaborateurs de votre service'
+    default:
+      return 'Vos subordonnés directs'
+  }
+}
 
 async function getPeriodeIdOrDefault(periodeIdParam: string | null): Promise<number | null> {
   if (periodeIdParam) {
@@ -28,7 +42,14 @@ export async function GET(request: NextRequest) {
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }
-  const managerId = parseInt((result.session!.user as { id?: string }).id ?? '', 10)
+  const sessionUser = result.session!.user as {
+    id?: string
+    role?: string
+    serviceId?: number | null
+    directionId?: number | null
+  }
+  const managerId = parseInt(sessionUser.id ?? '', 10)
+  const role = sessionUser.role ?? 'MANAGER'
   if (Number.isNaN(managerId)) {
     return NextResponse.json({ error: 'Session invalide' }, { status: 401 })
   }
@@ -50,12 +71,11 @@ export async function GET(request: NextRequest) {
   const anneeCourant = now.getFullYear()
 
   try {
-    const employes = await prisma.user.findMany({
-      where: { managerId, role: 'EMPLOYE', actif: true },
-      include: {
-        service: { select: { id: true, nom: true } },
-      },
-      orderBy: [{ nom: 'asc' }, { prenom: 'asc' }],
+    const collaborateurs = await getCollaborateursAssignables({
+      id: managerId,
+      role,
+      serviceId: sessionUser.serviceId ?? null,
+      directionId: sessionUser.directionId ?? null,
     })
 
     const employesList: {
@@ -63,6 +83,9 @@ export async function GET(request: NextRequest) {
       nom: string
       prenom: string
       email: string
+      role: string
+      directionId: number | null
+      directionNom: string | null
       serviceId: number | null
       serviceNom: string | null
       scoreGlobal: number
@@ -71,7 +94,7 @@ export async function GET(request: NextRequest) {
       sommePoids: number
     }[] = []
 
-    for (const u of employes) {
+    for (const u of collaborateurs) {
       let scoreGlobal = 0
       try {
         const r = await consolidateEmploye(u.id, periodeId, { includeSoumises: true })
@@ -102,6 +125,9 @@ export async function GET(request: NextRequest) {
         nom: u.nom,
         prenom: u.prenom,
         email: u.email,
+        role: u.role,
+        directionId: u.directionId,
+        directionNom: u.direction?.nom ?? null,
         serviceId: u.serviceId,
         serviceNom: u.service?.nom ?? null,
         scoreGlobal,
@@ -111,6 +137,16 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    employesList.sort((a, b) => {
+      const dirA = a.directionNom ?? 'Sans direction'
+      const dirB = b.directionNom ?? 'Sans direction'
+      if (dirA !== dirB) return dirA.localeCompare(dirB, 'fr')
+      const svcA = a.serviceNom ?? 'Sans service'
+      const svcB = b.serviceNom ?? 'Sans service'
+      if (svcA !== svcB) return svcA.localeCompare(svcB, 'fr')
+      return a.nom.localeCompare(b.nom, 'fr') || a.prenom.localeCompare(b.prenom, 'fr')
+    })
+
     const employesSansKpi = employesList.filter((e) => e.kpiTotalAssignes === 0)
     const saisiesManquantes = employesList.filter(
       (e) => e.statutSaisieMois === 'MANQUANTE' || e.statutSaisieMois === 'EN_RETARD'
@@ -119,6 +155,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       periodeId,
       periodeCode,
+      perimetreLabel: perimetreLabel(role),
+      viewerRole: role,
       employes: employesList,
       alertes: {
         employesSansKpi: employesSansKpi.map((e) => ({ id: e.id, nom: e.nom, prenom: e.prenom })),

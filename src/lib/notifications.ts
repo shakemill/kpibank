@@ -1,4 +1,5 @@
 import type { TypeNotification } from '@/generated/prisma/client'
+import { formaterNomKpiAffichage } from '@/lib/kpi-cible-utils'
 import { prisma } from '@/lib/prisma'
 import { sendMail } from '@/lib/mailer'
 import { getEtablissementNom } from '@/lib/etablissement'
@@ -7,7 +8,9 @@ import {
   templateKpiNotifie,
   templateSaisieValidee,
   templateKpiConteste,
+  templateKpiReponseContestation,
   templateSaisieEnRetard,
+  type KpiRecapEmailRow,
 } from '@/lib/email-templates'
 
 /**
@@ -36,30 +39,39 @@ export async function createNotification(
 const ASSIGNATEUR_ROLE_LABEL: Record<string, string> = {
   DG: 'DG',
   DIRECTEUR: 'Directeur',
-  CHEF_SERVICE: 'Chef de service',
+  CHEF_SERVICE: "Chef département / Chef d'agence",
   MANAGER: 'Manager',
 }
 
 /**
- * Notifie un utilisateur qu'un KPI lui a été assigné (DG → Directeur, Chef de service → Manager, etc.).
+ * Notifie un employé que ses KPI (brouillons → notifiés) sont prêts à valider.
+ * Envoie une notification in-app et un email récapitulatif avec cibles et lien de validation.
  */
-export async function notifierKpiAssigne(
-  destinataireId: number,
+export async function notifierKpisEmploye(
+  employeId: number,
   assignateurNom: string,
   assignateurRole: string,
-  kpiNom: string,
-  periodeCode: string
+  periodeCode: string,
+  kpis: KpiRecapEmailRow[]
 ): Promise<number> {
+  if (kpis.length === 0) return 0
+
   const roleLabel = ASSIGNATEUR_ROLE_LABEL[assignateurRole] ?? assignateurRole
   const prefix = assignateurRole === 'DG' ? 'Le DG' : `Le ${roleLabel}`
-  const titre = 'KPI assigné'
-  const message = `${prefix} ${assignateurNom} vous a assigné le KPI « ${kpiNom} » pour la période ${periodeCode}.`
+  const titre = kpis.length === 1 ? 'KPI assigné' : 'KPI assignés'
+  const nomsListe = kpis.map((k) => `« ${k.nom} »`).join(', ')
+  const message =
+    kpis.length === 1
+      ? `${prefix} ${assignateurNom} vous a assigné le KPI ${nomsListe} pour la période ${periodeCode}.`
+      : `${prefix} ${assignateurNom} vous a assigné ${kpis.length} KPI pour la période ${periodeCode} : ${nomsListe}.`
   const lien = '/employe/mes-kpi'
-  await createNotification(destinataireId, 'KPI_NOTIFIE', titre, message, lien)
+
+  await createNotification(employeId, 'KPI_NOTIFIE', titre, message, lien)
+
   try {
     const [user, nomEtablissement] = await Promise.all([
       prisma.user.findUnique({
-        where: { id: destinataireId },
+        where: { id: employeId },
         select: { email: true, prenom: true },
       }),
       getEtablissementNom(),
@@ -67,14 +79,21 @@ export async function notifierKpiAssigne(
     if (user?.email) {
       await sendMail({
         to: user.email,
-        subject: titre,
-        html: templateKpiNotifie(nomEtablissement, user.prenom ?? 'Collaborateur', assignateurNom, periodeCode, 1),
+        subject: `${titre} — ${periodeCode}`,
+        html: templateKpiNotifie(
+          nomEtablissement,
+          user.prenom ?? 'Collaborateur',
+          assignateurNom,
+          periodeCode,
+          kpis
+        ),
       })
     }
   } catch (_e) {
     // Ne pas bloquer le flux
   }
-  return 1
+
+  return kpis.length
 }
 
 /**
@@ -318,9 +337,52 @@ export async function notifierEmployeReponseContestation(
   const titre = decision === 'MAINTENU' ? 'Contestation maintenue' : 'Contestation révisée'
   const message =
     decision === 'MAINTENU'
-      ? 'Votre manager a maintenu le KPI tel quel après examen de votre contestation.'
-      : 'Votre manager a révisé le KPI suite à votre contestation.'
+      ? 'Votre manager a maintenu le KPI tel quel après examen de votre contestation. Vous pouvez saisir vos réalisations.'
+      : 'Votre manager a révisé le KPI suite à votre contestation. Vous pouvez saisir vos réalisations.'
   const lien = '/employe/mes-kpi'
   await createNotification(userId, type, titre, message, lien)
+
+  try {
+    const [kpi, user, nomEtablissement] = await Promise.all([
+      prisma.kpiEmploye.findUnique({
+        where: { id: kpiEmployeId },
+        select: {
+          cible: true,
+          poids: true,
+          reponse_contestation: true,
+          catalogueKpi: { select: { nom: true } },
+          assignePar: { select: { prenom: true, nom: true } },
+        },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, prenom: true },
+      }),
+      getEtablissementNom(),
+    ])
+
+    if (user?.email && kpi?.reponse_contestation) {
+      const managerNom = kpi.assignePar
+        ? `${kpi.assignePar.prenom} ${kpi.assignePar.nom}`.trim()
+        : 'Votre manager'
+      await sendMail({
+        to: user.email,
+        subject: titre,
+        html: templateKpiReponseContestation(
+          nomEtablissement,
+          user.prenom ?? 'Collaborateur',
+          managerNom,
+          formaterNomKpiAffichage(kpi.catalogueKpi.nom),
+          decision,
+          kpi.reponse_contestation,
+          decision === 'REVISE' ? kpi.cible : undefined,
+          decision === 'REVISE' ? kpi.poids : undefined
+        ),
+      })
+    }
+  } catch (_e) {
+    // Ne pas bloquer le flux
+  }
+
   return 1
 }

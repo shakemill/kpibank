@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { peutAssignerA } from '@/lib/assignation-rules'
+import { formaterNomKpiAffichage } from '@/lib/kpi-cible-utils'
+import { notifierKpisEmploye } from '@/lib/notifications'
 
 export async function POST(
   request: NextRequest,
@@ -54,12 +56,46 @@ export async function POST(
     )
   }
 
-  const drafts = await prisma.kpiEmploye.findMany({
-    where: { employeId, periodeId, statut: 'DRAFT' },
-    select: { id: true, poids: true },
-  })
+  const [drafts, periode, assignateur, employe] = await Promise.all([
+    prisma.kpiEmploye.findMany({
+      where: { employeId, periodeId, statut: 'DRAFT' },
+      select: {
+        id: true,
+        poids: true,
+        cible: true,
+        kpiServiceId: true,
+        catalogueKpi: { select: { nom: true, unite: true } },
+      },
+    }),
+    prisma.periode.findUnique({
+      where: { id: periodeId },
+      select: { code: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: assignateurId },
+      select: { prenom: true, nom: true, role: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: employeId },
+      select: { id: true },
+    }),
+  ])
+
+  if (!periode) {
+    return NextResponse.json({ error: 'Période introuvable' }, { status: 404 })
+  }
+  if (!employe) {
+    return NextResponse.json({ error: 'Employé introuvable' }, { status: 404 })
+  }
+  if (drafts.length === 0) {
+    return NextResponse.json(
+      { error: 'Aucun KPI en brouillon à notifier' },
+      { status: 400 }
+    )
+  }
+  const requiresPoidsSum = drafts.some((k) => k.kpiServiceId != null)
   const sumPoids = drafts.reduce((s, k) => s + k.poids, 0)
-  if (Math.abs(sumPoids - 100) > 0.01) {
+  if (requiresPoidsSum && Math.abs(sumPoids - 100) > 0.01) {
     return NextResponse.json(
       {
         error:
@@ -75,6 +111,25 @@ export async function POST(
       where: { employeId, periodeId, statut: 'DRAFT' },
       data: { statut: 'NOTIFIE', date_notification: now },
     })
+
+    const assignateurNom = assignateur
+      ? `${assignateur.prenom} ${assignateur.nom}`.trim()
+      : 'Votre manager'
+    const kpisRecap = drafts.map((k) => ({
+      nom: formaterNomKpiAffichage(k.catalogueKpi.nom),
+      cible: k.cible,
+      unite: k.catalogueKpi.unite,
+      poids: k.poids,
+    }))
+
+    await notifierKpisEmploye(
+      employeId,
+      assignateurNom,
+      assignateur?.role ?? sessionUser.role ?? '',
+      periode.code,
+      kpisRecap
+    )
+
     return NextResponse.json({ success: true, count: drafts.length })
   } catch (e) {
     return NextResponse.json(

@@ -5,12 +5,14 @@ import {
   getSessionAndRequireDirecteur,
   getSessionAndRequireDG,
 } from '@/lib/api-auth'
-import { prisma } from '@/lib/prisma'
 import {
   consolidateEmploye,
   consolidateService,
   consolidateDirection,
 } from '@/lib/consolidation'
+import { isObjectifAtteint } from '@/lib/notation-grille'
+import { getCollaborateursAssignables } from '@/lib/assignation-rules'
+import { prisma } from '@/lib/prisma'
 
 const VALID_ROLES = ['employe', 'manager', 'directeur', 'dg'] as const
 type DashboardRole = (typeof VALID_ROLES)[number]
@@ -99,7 +101,7 @@ export async function GET(
           for (const d of result.details) {
             const ke = await prisma.kpiEmploye.findFirst({
               where: { employeId: userId, periodeId, catalogueKpi: { nom: d.nom } },
-              include: { catalogueKpi: { select: { mode_agregation: true, type: true } } },
+              include: { catalogueKpi: { select: { mode_agregation: true, type: true, sens_calcul: true } } },
             })
             if (!ke) {
               byKpi[d.nom] = 0
@@ -118,7 +120,12 @@ export async function GET(
               ? (saisies[0].valeur_ajustee ?? saisies[0].valeur_realisee) ?? 0
               : 0
             const { calculerTauxAtteinte } = await import('@/lib/saisie-utils')
-            const taux = calculerTauxAtteinte(val, ke.cible, ke.catalogueKpi.type as import('@/lib/saisie-utils').TypeKpi)
+            const taux = calculerTauxAtteinte(
+              val,
+              ke.cible,
+              ke.catalogueKpi.type as import('@/lib/saisie-utils').TypeKpi,
+              (ke.catalogueKpi.sens_calcul ?? 'DIRECT') as import('@/lib/saisie-utils').SensCalculKpi
+            )
             byKpi[d.nom] = taux
           }
           evolutionMois.push({
@@ -182,7 +189,7 @@ export async function GET(
         const res = await consolidateEmploye(emp.id, periodeId, { includeSoumises: true })
         consolidationByEmploye.set(emp.id, res)
         const nbKpi = res.details.length
-        const nbValides = res.details.filter((d) => d.tauxAtteinte >= 100).length
+        const nbValides = res.details.filter((d) => isObjectifAtteint(d.tauxAtteinte)).length
         const saisie = await prisma.saisieMensuelle.findFirst({
           where: {
             employeId: emp.id,
@@ -292,7 +299,8 @@ export async function GET(
       const directions = directionId
         ? await prisma.direction.findMany({ where: { id: directionId }, select: { id: true, nom: true } })
         : await prisma.direction.findMany({ select: { id: true, nom: true } })
-      let scoreDirection = 0
+      let scoreDirectionKpis = 0
+      let scoreEmployes = 0
       const servicesData: {
         serviceId: number
         serviceNom: string
@@ -305,20 +313,30 @@ export async function GET(
       const employeScoresForTop: { nom: string; prenom: string; score: number }[] = []
 
       for (const dir of directions) {
-        await consolidateDirection(dir.id, periodeId)
+        const consRes = await consolidateDirection(dir.id, periodeId)
+        if (directions.length === 1) {
+          scoreDirectionKpis = consRes.scoreDirectionKpis
+          scoreEmployes = consRes.scoreEmployes
+        }
       }
       const consolidationsDir = await prisma.consolidationDirection.findMany({
         where: {
           periodeId,
           directionId: directionId ?? { in: directions.map((d) => d.id) },
         },
-        include: { direction: { select: { id: true, nom: true } } },
+        select: {
+          score_direction_kpis: true,
+          score_employes: true,
+        },
       })
       if (consolidationsDir.length === 1) {
-        scoreDirection = consolidationsDir[0].taux_atteinte_moyen
+        scoreDirectionKpis = consolidationsDir[0].score_direction_kpis
+        scoreEmployes = consolidationsDir[0].score_employes
       } else if (consolidationsDir.length > 1) {
-        scoreDirection =
-          consolidationsDir.reduce((s, c) => s + c.taux_atteinte_moyen, 0) / consolidationsDir.length
+        scoreDirectionKpis =
+          consolidationsDir.reduce((s, c) => s + c.score_direction_kpis, 0) / consolidationsDir.length
+        scoreEmployes =
+          consolidationsDir.reduce((s, c) => s + c.score_employes, 0) / consolidationsDir.length
       }
 
       const targetDirIds = directionId ? [directionId] : directions.map((d) => d.id)
@@ -387,7 +405,7 @@ export async function GET(
           }
         }
         const employes = await prisma.user.findMany({
-          where: { serviceId: svc.id, role: 'EMPLOYE', actif: true },
+          where: { serviceId: svc.id, actif: true },
           select: { id: true, nom: true, prenom: true },
         })
         for (const u of employes) {
@@ -400,14 +418,93 @@ export async function GET(
       const top5 = sorted.slice(0, 5)
       const bottom5 = sorted.slice(-5).reverse()
 
+      const now = new Date()
+      const moisCourant = now.getMonth() + 1
+      const anneeCourant = now.getFullYear()
+      const user = dirResult.session!.user as {
+        id?: string
+        role?: string
+        serviceId?: number | null
+        directionId?: number | null
+      }
+      const assignateurId = parseInt(user.id ?? '', 10)
+      const collaborateurs = Number.isNaN(assignateurId)
+        ? []
+        : await getCollaborateursAssignables({
+            id: assignateurId,
+            role: user.role ?? 'DIRECTEUR',
+            serviceId: user.serviceId ?? null,
+            directionId: user.directionId ?? directionId ?? null,
+          })
+      const employeIds = collaborateurs.map((c) => c.id)
+      const nbSaisiesAValider =
+        employeIds.length === 0
+          ? 0
+          : await prisma.saisieMensuelle.count({
+              where: {
+                employeId: { in: employeIds },
+                mois: moisCourant,
+                annee: anneeCourant,
+                statut: 'SOUMISE',
+              },
+            })
+      const nbContestations =
+        employeIds.length === 0
+          ? 0
+          : await prisma.kpiEmploye.count({
+              where: {
+                employeId: { in: employeIds },
+                statut: 'CONTESTE',
+              },
+            })
+      let nbSaisiesManquantes = 0
+      const periodesMois = await prisma.periode.findMany({
+        where: {
+          actif: true,
+          mois_debut: { lte: moisCourant },
+          mois_fin: { gte: moisCourant },
+          annee: anneeCourant,
+        },
+        select: { id: true },
+        take: 1,
+      })
+      const periodeIdMois = periodesMois[0]?.id
+      if (periodeIdMois && employeIds.length > 0) {
+        const kpiValides = await prisma.kpiEmploye.findMany({
+          where: {
+            employeId: { in: employeIds },
+            periodeId: periodeIdMois,
+            statut: { in: ['VALIDE', 'CLOTURE'] },
+          },
+          select: { employeId: true },
+        })
+        const employeIdsAvecKpi = [...new Set(kpiValides.map((k) => k.employeId))]
+        const saisiesExistantes = await prisma.saisieMensuelle.findMany({
+          where: {
+            employeId: { in: employeIdsAvecKpi },
+            mois: moisCourant,
+            annee: anneeCourant,
+            statut: { notIn: ['MANQUANTE'] },
+          },
+          select: { employeId: true },
+        })
+        const avecSaisie = new Set(saisiesExistantes.map((s) => s.employeId))
+        nbSaisiesManquantes = employeIdsAvecKpi.filter((id) => !avecSaisie.has(id)).length
+      }
+
       return NextResponse.json({
         periodeId,
-        scoreDirection,
+        scoreDirectionKpis,
+        scoreEmployes,
         services: servicesData,
         heatmap: heatmapRows,
         kpiNoms: allKpiNoms,
         top5,
         bottom5,
+        nbSaisiesAValider,
+        nbSaisiesManquantes,
+        nbContestations,
+        nbCollaborateurs: employeIds.length,
       })
     } catch (e) {
       return NextResponse.json(
@@ -431,103 +528,144 @@ export async function GET(
       const directions = await prisma.direction.findMany({
         where: { actif: true },
         select: { id: true, nom: true },
+        orderBy: { nom: 'asc' },
       })
-      for (const d of directions) {
-        await consolidateDirection(d.id, periodeId)
-      }
-      const consolidations = await prisma.consolidationDirection.findMany({
-        where: { periodeId },
-        include: { direction: { select: { id: true, nom: true } } },
-      })
-      const chartDirections = consolidations.map((c) => ({
-        direction: c.direction.nom,
-        taux: c.taux_atteinte_moyen,
-      }))
-      const drillDown: {
-        directionId: number
-        directionNom: string
-        taux: number
-        services: {
-          serviceId: number
-          serviceNom: string
-          taux: number
-          employes: { nom: string; prenom: string; score: number }[]
-        }[]
-      }[] = []
-      for (const c of consolidations) {
-        const services = await prisma.service.findMany({
-          where: { directionId: c.directionId },
-          select: { id: true, nom: true },
-        })
-        const serviceRows: {
-          serviceId: number
-          serviceNom: string
-          taux: number
-          employes: { nom: string; prenom: string; score: number }[]
-        }[] = []
-        for (const svc of services) {
-          const consSvc = await consolidateService(svc.id, periodeId)
-          const kpiEmployesSvc = await prisma.kpiEmploye.findMany({
-            where: { kpiService: { serviceId: svc.id }, periodeId },
-            select: {
-              employeId: true,
-              poids: true,
-              scorePeriodes: { where: { periodeId }, select: { taux_atteinte: true } },
-              employe: { select: { nom: true, prenom: true } },
-            },
+      const directionIds = directions.map((d) => d.id)
+
+      const services = directionIds.length
+        ? await prisma.service.findMany({
+            where: { directionId: { in: directionIds }, actif: true },
+            select: { id: true, nom: true, directionId: true },
+            orderBy: { nom: 'asc' },
           })
-          const scoreByEmploye = new Map<number, { sumPond: number; sumPoids: number; nom: string; prenom: string }>()
-          for (const ke of kpiEmployesSvc) {
-            const sp = ke.scorePeriodes[0]
-            if (sp) {
-              const cur = scoreByEmploye.get(ke.employeId)
-              if (cur) {
-                cur.sumPond += sp.taux_atteinte * ke.poids
-                cur.sumPoids += ke.poids
-              } else {
-                scoreByEmploye.set(ke.employeId, {
-                  sumPond: sp.taux_atteinte * ke.poids,
-                  sumPoids: ke.poids,
-                  nom: ke.employe.nom,
-                  prenom: ke.employe.prenom,
-                })
-              }
-            }
-          }
-          const employeScores = Array.from(scoreByEmploye.entries()).map(([, o]) => ({
-            nom: o.nom,
-            prenom: o.prenom,
-            score: o.sumPoids > 0 ? o.sumPond / o.sumPoids : 0,
-          }))
-          serviceRows.push({
-            serviceId: svc.id,
-            serviceNom: svc.nom,
-            taux: consSvc.tauxAtteinteMoyen,
-            employes: employeScores,
+        : []
+      const serviceIds = services.map((s) => s.id)
+
+      const [
+        consolidationsDir,
+        consolidationsSvc,
+        kpiEmployesAll,
+        nbPeriodesEnCours,
+        directeurs,
+        directeursAvecKpi,
+      ] = await Promise.all([
+        directionIds.length
+          ? prisma.consolidationDirection.findMany({
+              where: { periodeId, directionId: { in: directionIds } },
+              select: {
+                directionId: true,
+                taux_atteinte_moyen: true,
+                score_direction_kpis: true,
+                score_employes: true,
+              },
+            })
+          : Promise.resolve([]),
+        serviceIds.length
+          ? prisma.consolidationService.findMany({
+              where: { periodeId, serviceId: { in: serviceIds } },
+              select: { serviceId: true, taux_atteinte_moyen: true },
+            })
+          : Promise.resolve([]),
+        serviceIds.length
+          ? prisma.kpiEmploye.findMany({
+              where: { periodeId, kpiService: { serviceId: { in: serviceIds } } },
+              select: {
+                employeId: true,
+                poids: true,
+                kpiService: { select: { serviceId: true } },
+                scorePeriodes: { where: { periodeId }, select: { taux_atteinte: true } },
+                employe: { select: { nom: true, prenom: true } },
+              },
+            })
+          : Promise.resolve([]),
+        prisma.periode.count({
+          where: { actif: true, statut: 'EN_COURS' },
+        }),
+        prisma.user.findMany({
+          where: { role: 'DIRECTEUR', actif: true },
+          select: { id: true },
+        }),
+        prisma.kpiEmploye.findMany({
+          where: {
+            periodeId,
+            statut: { in: ['VALIDE', 'CLOTURE'] },
+            employe: { role: 'DIRECTEUR', actif: true },
+          },
+          select: { employeId: true },
+        }),
+      ])
+
+      const tauxByDirection = new Map(
+        consolidationsDir.map((c) => [c.directionId, c.score_employes])
+      )
+      const scoreDirectionKpisByDirection = new Map(
+        consolidationsDir.map((c) => [c.directionId, c.score_direction_kpis])
+      )
+      const tauxByService = new Map(
+        consolidationsSvc.map((c) => [c.serviceId, c.taux_atteinte_moyen])
+      )
+
+      type EmpAgg = { sumPond: number; sumPoids: number; nom: string; prenom: string }
+      const scoresByService = new Map<number, Map<number, EmpAgg>>()
+      for (const ke of kpiEmployesAll) {
+        const sp = ke.scorePeriodes[0]
+        if (!sp) continue
+        const serviceId = ke.kpiService.serviceId
+        let byEmploye = scoresByService.get(serviceId)
+        if (!byEmploye) {
+          byEmploye = new Map()
+          scoresByService.set(serviceId, byEmploye)
+        }
+        const cur = byEmploye.get(ke.employeId)
+        if (cur) {
+          cur.sumPond += sp.taux_atteinte * ke.poids
+          cur.sumPoids += ke.poids
+        } else {
+          byEmploye.set(ke.employeId, {
+            sumPond: sp.taux_atteinte * ke.poids,
+            sumPoids: ke.poids,
+            nom: ke.employe.nom,
+            prenom: ke.employe.prenom,
           })
         }
-        drillDown.push({
-          directionId: c.directionId,
-          directionNom: c.direction.nom,
-          taux: c.taux_atteinte_moyen,
-          services: serviceRows,
-        })
       }
-      const nbPeriodesEnCours = await prisma.periode.count({
-        where: { actif: true, statut: 'EN_COURS' },
-      })
-      const directeurs = await prisma.user.findMany({
-        where: { role: 'DIRECTEUR', actif: true },
-        select: { id: true },
-      })
-      const directeursAvecKpi = await prisma.kpiEmploye.findMany({
-        where: {
-          employeId: { in: directeurs.map((d) => d.id) },
-          periodeId,
-          statut: { in: ['VALIDE', 'CLOTURE'] },
-        },
-        select: { employeId: true },
-      })
+
+      const servicesByDirection = new Map<number, typeof services>()
+      for (const svc of services) {
+        const list = servicesByDirection.get(svc.directionId) ?? []
+        list.push(svc)
+        servicesByDirection.set(svc.directionId, list)
+      }
+
+      const chartDirections = directions.map((d) => ({
+        direction: d.nom,
+        taux: tauxByDirection.get(d.id) ?? 0,
+        scoreDirectionKpis: scoreDirectionKpisByDirection.get(d.id) ?? 0,
+      }))
+
+      const drillDown = directions.map((d) => ({
+        directionId: d.id,
+        directionNom: d.nom,
+        taux: tauxByDirection.get(d.id) ?? 0,
+        scoreDirectionKpis: scoreDirectionKpisByDirection.get(d.id) ?? 0,
+        services: (servicesByDirection.get(d.id) ?? []).map((svc) => {
+          const byEmploye = scoresByService.get(svc.id)
+          const employes = byEmploye
+            ? Array.from(byEmploye.values()).map((o) => ({
+                nom: o.nom,
+                prenom: o.prenom,
+                score: o.sumPoids > 0 ? o.sumPond / o.sumPoids : 0,
+              }))
+            : []
+          return {
+            serviceId: svc.id,
+            serviceNom: svc.nom,
+            taux: tauxByService.get(svc.id) ?? 0,
+            employes,
+          }
+        }),
+      }))
+
       const idsAvecKpi = new Set(directeursAvecKpi.map((k) => k.employeId))
       const nbDirecteursSansKpi = directeurs.filter((d) => !idsAvecKpi.has(d.id)).length
       return NextResponse.json({

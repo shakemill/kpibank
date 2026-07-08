@@ -9,6 +9,17 @@ import { cn } from '@/lib/utils'
 function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
+  if (!mounted) {
+    return (
+      <div
+        data-slot="select"
+        aria-hidden
+        className="inline-flex h-9 min-w-[8rem] rounded-md border border-input bg-muted/50"
+      />
+    )
+  }
   return <SelectPrimitive.Root data-slot="select" {...props} />
 }
 

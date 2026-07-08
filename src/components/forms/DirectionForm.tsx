@@ -13,24 +13,28 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
-type UserOption = { id: number; nom: string; prenom: string; email: string }
+type DirecteurTitulaire = {
+  id: number
+  nom: string
+  prenom: string
+  email: string
+}
 
 interface DirectionFormProps {
   defaultValues?: Partial<DirectionCreateInput & { actif?: boolean }>
-  users: UserOption[]
+  directeurTitulaire?: DirecteurTitulaire | null
   onSubmit: (values: DirectionCreateInput | DirectionUpdateInput) => void | Promise<void>
   isEdit?: boolean
 }
 
-export function DirectionForm({ defaultValues, users, onSubmit, isEdit }: DirectionFormProps) {
+function libellerDirecteurTitulaire(directeur: DirecteurTitulaire | null | undefined): string {
+  if (!directeur) return '—'
+  const nomComplet = [directeur.prenom, directeur.nom].filter(Boolean).join(' ')
+  return `${nomComplet} (${directeur.email})`
+}
+
+export function DirectionForm({ defaultValues, directeurTitulaire, onSubmit, isEdit }: DirectionFormProps) {
   const schema = isEdit ? directionUpdateSchema : directionCreateSchema
   const form = useForm<DirectionCreateInput | DirectionUpdateInput>({
     resolver: zodResolver(schema),
@@ -38,7 +42,6 @@ export function DirectionForm({ defaultValues, users, onSubmit, isEdit }: Direct
       nom: defaultValues?.nom ?? '',
       code: defaultValues?.code ?? '',
       description: defaultValues?.description ?? '',
-      responsableId: defaultValues?.responsableId ?? undefined,
     },
   })
 
@@ -84,34 +87,17 @@ export function DirectionForm({ defaultValues, users, onSubmit, isEdit }: Direct
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="responsableId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Responsable (optionnel)</FormLabel>
-              <Select
-                onValueChange={(v) => field.onChange(v === 'none' ? null : (v ? parseInt(v, 10) : null))}
-                value={field.value != null ? String(field.value) : 'none'}
-              >
-                <FormControl>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Sélectionner un responsable" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="none">Aucun</SelectItem>
-                  {users.map((u) => (
-                    <SelectItem key={u.id} value={String(u.id)}>
-                      {u.prenom} {u.nom} ({u.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {isEdit && (
+          <div className="rounded-lg border bg-muted/30 px-3 py-2.5 space-y-1">
+            <p className="text-sm font-medium">Directeur titulaire</p>
+            <p className="text-sm text-muted-foreground">
+              {libellerDirecteurTitulaire(directeurTitulaire)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Défini via Organisation → Utilisateurs (rôle Directeur, fonction sans « adjoint »).
+            </p>
+          </div>
+        )}
         <Button type="submit" disabled={form.formState.isSubmitting}>
           {form.formState.isSubmitting ? 'Enregistrement...' : isEdit ? 'Mettre à jour' : 'Créer'}
         </Button>

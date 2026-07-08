@@ -5,6 +5,7 @@ import {
   calculerAgregation,
   calculerTauxAtteinte,
   type ModeAgregation,
+  type SensCalculKpi,
   type TypeKpi,
 } from '@/lib/saisie-utils'
 
@@ -49,6 +50,7 @@ export async function GET() {
 
   const result = list.map((kpi) => {
     const typeKpi = typeKpiMap[kpi.catalogueKpi.type] ?? 'QUANTITATIF'
+    const sensCalcul = (kpi.catalogueKpi.sens_calcul ?? 'DIRECT') as SensCalculKpi
     const mode = modeMap[kpi.catalogueKpi.mode_agregation] ?? 'MOYENNE'
     const saisiesForAgg = kpi.saisiesMensuelles.map((s) => ({
       mois: s.mois,
@@ -59,7 +61,8 @@ export async function GET() {
     const tauxAtteinte = calculerTauxAtteinte(
       valeurAgregee,
       kpi.cible,
-      typeKpi
+      typeKpi,
+      sensCalcul
     )
 
     return {

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { resolveUserDirectionId } from '@/lib/user-direction'
 
 export type SessionUser = {
   id: string
@@ -24,11 +25,23 @@ export async function canAccessEmployeData(
 
   const employe = await prisma.user.findUnique({
     where: { id: employeId },
-    select: { managerId: true, serviceId: true, directionId: true },
+    select: {
+      managerId: true,
+      serviceId: true,
+      directionId: true,
+      service: { select: { directionId: true } },
+    },
   })
   if (!employe) return false
+  const employeDirectionId = resolveUserDirectionId(employe)
   if (employe.managerId === currentId) return true
-  if (sessionUser.role === 'DIRECTEUR' && employe.directionId === sessionUser.directionId) return true
+  if (
+    sessionUser.role === 'DIRECTEUR' &&
+    sessionUser.directionId != null &&
+    employeDirectionId === sessionUser.directionId
+  ) {
+    return true
+  }
   if (sessionUser.role === 'CHEF_SERVICE' && employe.serviceId === sessionUser.serviceId) return true
   if (['MANAGER', 'DIRECTEUR', 'CHEF_SERVICE'].includes(role)) {
     const managed = await prisma.user.findFirst({
@@ -41,10 +54,12 @@ export async function canAccessEmployeData(
       select: { id: true },
     })
     if (serviceResp) return true
-    const dirResp = await prisma.direction.findFirst({
-      where: { id: employe.directionId ?? 0, responsableId: currentId },
-      select: { id: true },
-    })
+    const dirResp = employeDirectionId
+      ? await prisma.direction.findFirst({
+          where: { id: employeDirectionId, responsableId: currentId },
+          select: { id: true },
+        })
+      : null
     if (dirResp) return true
   }
   return false

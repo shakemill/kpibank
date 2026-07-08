@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { getCollaborateursAssignables } from '@/lib/assignation-rules'
 
 /**
- * GET Liste des KPI Service (ACTIF) d'un service, pour un manager dont au moins un collaborateur appartient à ce service.
- * Utilisé par la page Assignation pour le select "KPI Service" lors de l'assignation à un employé.
+ * GET Liste des KPI Service (ACTIF) d'un service.
+ * Accès : manager avec collaborateur dans le service, directeur de la direction, ou DG.
  */
 export async function GET(request: NextRequest) {
   const result = await getSessionAndRequireManager()
@@ -22,17 +23,51 @@ export async function GET(request: NextRequest) {
   if (Number.isNaN(serviceId) || Number.isNaN(periodeId)) {
     return NextResponse.json({ error: 'IDs invalides' }, { status: 400 })
   }
-  const managerId = parseInt((result.session!.user as { id?: string }).id!, 10)
-  const hasAccess = await prisma.user.findFirst({
-    where: { managerId, serviceId },
-    select: { id: true },
+
+  const user = result.session!.user as {
+    id?: string
+    role?: string
+    serviceId?: number | null
+    directionId?: number | null
+  }
+  const assignateurId = parseInt(user.id ?? '', 10)
+  if (Number.isNaN(assignateurId)) {
+    return NextResponse.json({ error: 'Session invalide' }, { status: 401 })
+  }
+
+  const service = await prisma.service.findUnique({
+    where: { id: serviceId },
+    select: { id: true, directionId: true },
   })
+  if (!service) {
+    return NextResponse.json({ error: 'Service introuvable' }, { status: 404 })
+  }
+
+  const role = user.role ?? ''
+  let hasAccess = false
+  if (role === 'DG') {
+    hasAccess = true
+  } else if (role === 'DIRECTEUR') {
+    hasAccess = user.directionId != null && user.directionId === service.directionId
+  } else if (role === 'CHEF_SERVICE') {
+    hasAccess = user.serviceId === serviceId
+  } else {
+    const collaborateurs = await getCollaborateursAssignables({
+      id: assignateurId,
+      role,
+      serviceId: user.serviceId ?? null,
+      directionId: user.directionId ?? null,
+    })
+    hasAccess = collaborateurs.some((c) => c.serviceId === serviceId)
+  }
+
   if (!hasAccess) {
     return NextResponse.json(
-      { error: "Aucun collaborateur de votre équipe n'appartient à ce service" },
+      { error: "Vous n'avez pas accès aux KPI de ce service" },
       { status: 403 }
     )
   }
+
   try {
     const list = await prisma.kpiService.findMany({
       where: { serviceId, periodeId, statut: 'ACTIF' },

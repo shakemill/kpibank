@@ -7,12 +7,15 @@ import {
   calculerCibleAttenduADate,
   calculerRealiseCumule,
   calculerTauxAtteinte,
+  isSaisieModifiable,
   type ModeAgregation,
+  type SensCalculKpi,
   type TypeKpi,
   type SaisieMensuelleForCumul,
 } from '@/lib/saisie-utils'
 import { saisieCreateOrUpdateSchema } from '@/lib/validations/saisie'
 import { canAccessEmployeData } from '@/lib/access-control'
+import { STATUTS_KPI_SAISISSABLES } from '@/lib/kpi-statut'
 import { apiSuccess, apiError } from '@/lib/api-response'
 
 const MANAGER_ROLES = ['MANAGER', 'DG', 'DIRECTEUR', 'CHEF_SERVICE']
@@ -94,11 +97,11 @@ export async function GET(request: NextRequest) {
             where: {
               employeId: targetEmployeId,
               periodeId,
-              statut: { in: ['VALIDE', 'CLOTURE'] },
+              statut: { in: [...STATUTS_KPI_SAISISSABLES] },
             },
             include: {
               catalogueKpi: {
-                select: { id: true, nom: true, type: true, unite: true, mode_agregation: true },
+                select: { id: true, nom: true, type: true, unite: true, mode_agregation: true, sens_calcul: true },
               },
               periode: {
                 select: { mois_debut: true, mois_fin: true, annee: true, code: true },
@@ -174,9 +177,15 @@ export async function GET(request: NextRequest) {
           statut: s.statut,
         })) as SaisieMensuelleForCumul[]
       const realiseCumule = calculerRealiseCumule(saisiesKpi, modeAgregation, mois, true)
+      const typeKpi = ke.catalogueKpi.type as TypeKpi
+      const sensCalcul = (ke.catalogueKpi.sens_calcul ?? 'DIRECT') as SensCalculKpi
+      const referenceTaux =
+        modeAgregation === 'CUMUL' ? cibleAttendueADate : ke.cible
       const tauxAvancementPeriode =
-        cibleAttendueADate > 0
-          ? Math.round((realiseCumule / cibleAttendueADate) * 1000) / 10
+        referenceTaux > 0 || sensCalcul === 'ZERO_DEFAUT'
+          ? Math.round(
+              calculerTauxAtteinte(realiseCumule, referenceTaux, typeKpi, sensCalcul) * 10
+            ) / 10
           : 0
       const moisRestants = Math.max(0, ke.periode.mois_fin - mois)
       const saisieMoisCourant = saisiesMoisCourant.find((s) => s.kpiEmployeId === ke.id)
@@ -187,9 +196,12 @@ export async function GET(request: NextRequest) {
           const s = saisiesKpi.find((x) => x.mois === m)
           const valeur = s?.valeur_realisee ?? null
           const typeKpi = ke.catalogueKpi.type as TypeKpi
-          const taux =
-            valeur != null && cibleMois > 0
-              ? Math.round(calculerTauxAtteinte(valeur, cibleMois, typeKpi) * 10) / 10
+          const sensCalcul = (ke.catalogueKpi.sens_calcul ?? 'DIRECT') as SensCalculKpi
+          const peutCalculer =
+            valeur != null &&
+            (cibleMois > 0 || sensCalcul === 'ZERO_DEFAUT')
+          const taux = peutCalculer
+              ? Math.round(calculerTauxAtteinte(valeur!, cibleMois, typeKpi, sensCalcul) * 10) / 10
               : null
           return {
             mois: m,
@@ -209,6 +221,7 @@ export async function GET(request: NextRequest) {
           nom: ke.catalogueKpi.nom,
           type: ke.catalogueKpi.type,
           unite: ke.catalogueKpi.unite,
+          sens_calcul: ke.catalogueKpi.sens_calcul,
         },
         cible_periode: ke.cible,
         mode_agregation: modeAgregation,
@@ -289,13 +302,23 @@ export async function POST(request: NextRequest) {
 
   const kpiEmploye = await prisma.kpiEmploye.findUnique({
     where: { id: parsed.data.kpiEmployeId },
-    select: { employeId: true, catalogueKpi: { select: { type: true } } },
+    select: { employeId: true, statut: true, catalogueKpi: { select: { type: true } } },
   })
   if (!kpiEmploye || kpiEmploye.employeId !== employeId) {
     return apiError('KPI employé introuvable ou accès refusé', 403)
   }
+  if (!STATUTS_KPI_SAISISSABLES.includes(kpiEmploye.statut as (typeof STATUTS_KPI_SAISISSABLES)[number])) {
+    return apiError('Ce KPI n\'est pas encore validé pour la saisie', 403)
+  }
 
   try {
+    if (kpiEmploye.statut === 'MAINTENU' || kpiEmploye.statut === 'REVISE') {
+      await prisma.kpiEmploye.update({
+        where: { id: parsed.data.kpiEmployeId },
+        data: { statut: 'VALIDE', date_acceptation: new Date() },
+      })
+    }
+
     const existing = await prisma.saisieMensuelle.findUnique({
       where: {
         kpiEmployeId_mois_annee: {
@@ -329,7 +352,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (existing) {
-      if (!['OUVERTE', 'EN_RETARD'].includes(existing.statut)) {
+      if (!isSaisieModifiable(existing.statut)) {
         return apiError('Cette saisie ne peut plus être modifiée', 403)
       }
       const updated = await prisma.saisieMensuelle.update({
@@ -340,6 +363,15 @@ export async function POST(request: NextRequest) {
           preuves: data.preuves,
           statut: data.statut,
           en_retard: data.en_retard,
+          ...(existing.statut === 'REJETEE'
+            ? {
+                soumis_le: null,
+                valide_le: null,
+                valideParId: null,
+                valeur_ajustee: null,
+                motif_ajustement: null,
+              }
+            : {}),
         },
         include: {
           kpiEmploye: {

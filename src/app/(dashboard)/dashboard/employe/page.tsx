@@ -30,7 +30,9 @@ import {
 } from 'recharts'
 import { TrendingUp, TrendingDown, Minus, Target } from 'lucide-react'
 import { CardSkeleton } from '@/components/card-skeleton'
+import { NotationBadge } from '@/components/notation/NotationBadge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { getNotationGrille } from '@/lib/notation-grille'
 
 type Periode = { id: number; code: string; statut: string }
 type KpiDetail = {
@@ -58,20 +60,6 @@ type DashboardData = {
   comparaisonVsPrecedent: number | null
   evolutionMois: EvolutionPoint[]
   periode?: { id: number; mois_debut: number; mois_fin: number; annee: number }
-}
-
-const SCORE_COLORS = ['#ef4444', '#f97316', '#22c55e', '#3b82f6'] as const
-function scoreColor(score: number): string {
-  if (score < 70) return SCORE_COLORS[0]
-  if (score < 90) return SCORE_COLORS[1]
-  if (score < 100) return SCORE_COLORS[2]
-  return SCORE_COLORS[3]
-}
-function progressBarClass(score: number): string {
-  if (score < 70) return '[&_[data-slot=progress-indicator]]:!bg-red-500'
-  if (score < 90) return '[&_[data-slot=progress-indicator]]:!bg-orange-500'
-  if (score < 100) return '[&_[data-slot=progress-indicator]]:!bg-green-500'
-  return '[&_[data-slot=progress-indicator]]:!bg-blue-500'
 }
 
 export default function DashboardEmployePage() {
@@ -138,7 +126,11 @@ export default function DashboardEmployePage() {
   ) ?? {}
 
   const radialData = data
-    ? [{ name: 'Score', value: Math.min(100, Math.min(150, data.scoreGlobal)), fill: scoreColor(data.scoreGlobal) }]
+    ? [{
+        name: 'Score',
+        value: Math.min(100, Math.min(150, data.scoreGlobal)),
+        fill: getNotationGrille(data.scoreGlobal).chartColor,
+      }]
     : []
 
   if (error) {
@@ -217,7 +209,8 @@ export default function DashboardEmployePage() {
                   {data.scoreGlobal.toFixed(0)} %
                 </div>
               </div>
-              <div className="flex-1">
+              <div className="flex-1 space-y-3">
+                <NotationBadge taux={data.scoreGlobal} showCommentaire />
                 {data.comparaisonVsPrecedent != null && (
                   <p className="flex items-center gap-2 text-sm">
                     {data.comparaisonVsPrecedent > 0 && (
@@ -271,7 +264,7 @@ export default function DashboardEmployePage() {
                         </div>
                         <Progress
                           value={Math.min(150, d.tauxAtteinte)}
-                          className={progressBarClass(d.tauxAtteinte)}
+                          className={getNotationGrille(d.tauxAtteinte).progressClassName}
                         />
                       </div>
                     </CardContent>

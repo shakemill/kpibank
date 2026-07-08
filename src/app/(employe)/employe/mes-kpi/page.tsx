@@ -34,17 +34,41 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Target, Calendar, Check, AlertCircle, FileInput } from 'lucide-react'
+import { NotationBadge } from '@/components/notation/NotationBadge'
+import {
+  EmployePerformanceSection,
+  type KpiPerformanceRow,
+  type PerformancePeriode,
+} from '@/components/dashboard/employe-performance-section'
+import { cn } from '@/lib/utils'
+import {
+  Target,
+  Calendar,
+  Check,
+  AlertCircle,
+  FileInput,
+  Loader2,
+  ClipboardList,
+  MessageSquare,
+} from 'lucide-react'
 
 type Periode = { id: number; code: string; statut: string }
-type KpiRow = {
-  id: number
-  cible: number
+type KpiRow = KpiPerformanceRow & {
   poids: number
   statut: string
   motif_contestation: string | null
   reponse_contestation: string | null
-  catalogueKpi: { nom: string; unite: string | null }
+  realise_mois_courant?: number | null
+  statut_saisie_mois?: string | null
+  kpiService?: { id: number } | null
+}
+
+const STATUT_SAISIE_MAP: Record<string, { label: string; className: string }> = {
+  VALIDEE: { label: 'Validée', className: 'bg-green-500/10 text-green-700 dark:text-green-400' },
+  AJUSTEE: { label: 'Ajustée', className: 'bg-green-500/10 text-green-700 dark:text-green-400' },
+  SOUMISE: { label: 'Soumise', className: 'bg-blue-500/10 text-blue-700 dark:text-blue-400' },
+  OUVERTE: { label: 'En cours', className: 'bg-orange-500/10 text-orange-700 dark:text-orange-400' },
+  EN_RETARD: { label: 'En retard', className: 'bg-red-500/10 text-red-700 dark:text-red-400' },
 }
 
 const STATUT_MAP: Record<string, { label: string; className: string }> = {
@@ -62,6 +86,8 @@ export default function MesKpiPage() {
   const [periodes, setPeriodes] = useState<Periode[]>([])
   const [periodeId, setPeriodeId] = useState<number | null>(null)
   const [list, setList] = useState<KpiRow[]>([])
+  const [performance, setPerformance] = useState<PerformancePeriode | null>(null)
+  const [realisationsMois, setRealisationsMois] = useState<{ label: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingKpi, setLoadingKpi] = useState(false)
   const [contesterModal, setContesterModal] = useState<KpiRow | null>(null)
@@ -89,6 +115,8 @@ export default function MesKpiPage() {
     }
     const data = await res.json()
     setList(data.list ?? [])
+    setPerformance(data.performance ?? null)
+    setRealisationsMois(data.realisationsMois ?? null)
   }, [periodeId])
 
   useEffect(() => {
@@ -144,169 +172,303 @@ export default function MesKpiPage() {
     fetchKpi()
   }
 
+  const periodeCode = periodes.find((p) => p.id === periodeId)?.code ?? ''
+  const gestionParPoids = list.some((k) => (k.poids ?? 0) > 0)
+  const notifieCount = list.filter((k) => k.statut === 'NOTIFIE').length
+  const valideCount = list.filter((k) => k.statut === 'VALIDE').length
+  const contesteCount = list.filter((k) => k.statut === 'CONTESTE').length
+  const showPerformance = performance != null && list.length > 0
+
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Mes KPI</h1>
-        <p className="text-muted-foreground mt-1">
-          Consulter et accepter ou contester les KPI assignés pour la période.
-        </p>
-      </div>
-
-      <Card className="border-border/50">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-              <Calendar className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-base">Période</CardTitle>
-              <CardDescription>Choisir la période</CardDescription>
-            </div>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shadow-sm">
+            <Target className="h-6 w-6 text-primary" />
           </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p className="text-muted-foreground">Chargement...</p>
-          ) : (
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Mes KPI</h1>
+            <p className="text-muted-foreground text-sm">
+              Consulter, accepter et suivre vos objectifs
+              {periodeCode && (
+                <Badge variant="outline" className="ml-2 font-normal">
+                  {periodeCode}
+                </Badge>
+              )}
+            </p>
+          </div>
+        </div>
+        {!loading && (
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-1.5">
+            <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
             <Select
               value={periodeId != null ? String(periodeId) : 'none'}
               onValueChange={(v) => (v !== 'none' ? setPeriodeId(parseInt(v, 10)) : setPeriodeId(null))}
             >
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-[200px] border-0 bg-transparent shadow-none focus:ring-0">
                 <SelectValue placeholder="Sélectionner une période" />
               </SelectTrigger>
               <SelectContent>
                 {periodes.map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>{p.code}</SelectItem>
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.code} {p.statut === 'EN_COURS' ? '(en cours)' : ''}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
 
-      <Card className="border-border/50">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-              <Target className="h-5 w-5 text-primary" />
+      {!loadingKpi && list.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Card className="border-border/60">
+            <CardContent className="pt-5 pb-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                <Target className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">KPI assignés</p>
+                <p className="text-2xl font-bold tabular-nums">{list.length}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-border/60">
+            <CardContent className="pt-5 pb-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
+                <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Validés / actifs</p>
+                <p className="text-2xl font-bold tabular-nums">{valideCount}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className={cn('border-border/60', notifieCount > 0 && 'border-blue-300 dark:border-blue-800')}>
+            <CardContent className="pt-5 pb-4 flex items-center gap-3">
+              <div className={cn(
+                'h-10 w-10 rounded-xl flex items-center justify-center shrink-0',
+                notifieCount > 0 ? 'bg-blue-500/15' : 'bg-muted'
+              )}>
+                <ClipboardList className={cn(
+                  'h-5 w-5',
+                  notifieCount > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground'
+                )} />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">À traiter</p>
+                <p className="text-2xl font-bold tabular-nums">{notifieCount + contesteCount}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Card className="border-border/50 shadow-sm overflow-hidden">
+        <CardHeader className="bg-muted/30 border-b">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <ClipboardList className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-base">KPI de la période</CardTitle>
+                <CardDescription>Statut, réalisations et actions (accepter / contester / saisir)</CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-base">KPI de la période</CardTitle>
-              <CardDescription>Statut et actions (accepter / contester)</CardDescription>
-            </div>
+            {valideCount > 0 && (
+              <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                <Link href="/saisie">
+                  <FileInput className="h-3.5 w-3.5" />
+                  Aller à la saisie
+                </Link>
+              </Button>
+            )}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4">
           {periodeId == null ? (
-            <p className="text-muted-foreground">Sélectionnez une période.</p>
+            <p className="text-muted-foreground py-6 text-center">Sélectionnez une période.</p>
           ) : loadingKpi ? (
-            <p className="text-muted-foreground">Chargement...</p>
+            <div className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Chargement…</span>
+            </div>
+          ) : list.length === 0 ? (
+            <p className="text-muted-foreground py-6 text-center">Aucun KPI pour cette période.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>KPI</TableHead>
-                  <TableHead>Cible</TableHead>
-                  <TableHead>Unité</TableHead>
-                  <TableHead>Poids</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="w-[220px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {list.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-medium">{row.catalogueKpi.nom}</TableCell>
-                    <TableCell>{row.cible}</TableCell>
-                    <TableCell>{row.catalogueKpi.unite ?? '—'}</TableCell>
-                    <TableCell>{row.poids}%</TableCell>
-                    <TableCell>
-                      <Badge className={STATUT_MAP[row.statut]?.className ?? 'bg-muted'}>
-                        {STATUT_MAP[row.statut]?.label ?? row.statut}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {row.statut === 'NOTIFIE' && (
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1"
-                            onClick={() => handleAccepter(row)}
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                            Accepter
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1"
-                            onClick={() => openContester(row)}
-                          >
-                            <AlertCircle className="h-3.5 w-3.5" />
-                            Contester
-                          </Button>
-                        </div>
-                      )}
-                      {(row.statut === 'MAINTENU' || row.statut === 'REVISE') && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1"
-                          onClick={() => handleAccepter(row)}
+            <>
+              {realisationsMois && (
+                <p className="text-sm text-muted-foreground mb-4 flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5" />
+                  Mois de référence : <strong>{realisationsMois.label}</strong>
+                </p>
+              )}
+              <div className="rounded-lg border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="min-w-[180px]">KPI</TableHead>
+                      <TableHead className="text-right">Cible</TableHead>
+                      <TableHead>Unité</TableHead>
+                      {gestionParPoids && <TableHead className="text-right">Poids</TableHead>}
+                      <TableHead>Statut</TableHead>
+                      <TableHead className="text-right">Réalisé (période)</TableHead>
+                      <TableHead className="text-right">Mois courant</TableHead>
+                      <TableHead className="text-right">Taux</TableHead>
+                      <TableHead className="min-w-[200px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {list.map((row, idx) => {
+                      const unite = row.catalogueKpi.unite
+                      const fmt = (v: number | null | undefined) =>
+                        v != null ? `${Number(v).toFixed(1)}${unite ? ` ${unite}` : ''}` : '—'
+                      const statutSaisie = row.statut_saisie_mois
+                        ? STATUT_SAISIE_MAP[row.statut_saisie_mois]
+                        : null
+                      const stripe = idx % 2 === 1
+                      return (
+                        <TableRow
+                          key={row.id}
+                          className={cn(
+                            stripe ? 'bg-muted/40 hover:bg-muted/55' : 'hover:bg-muted/25'
+                          )}
                         >
-                          <Check className="h-3.5 w-3.5" />
-                          Valider
-                        </Button>
-                      )}
-                      {row.statut === 'VALIDE' && (
-                        <Button variant="outline" size="sm" asChild className="gap-1">
-                          <Link href={`/saisie?kpiEmployeId=${row.id}`}>
-                            <FileInput className="h-3.5 w-3.5" />
-                            Saisir
-                          </Link>
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-          {!loadingKpi && periodeId != null && list.length === 0 && (
-            <p className="text-muted-foreground py-4">Aucun KPI pour cette période.</p>
+                          <TableCell className="font-medium max-w-xs whitespace-normal break-words leading-snug">
+                            {row.catalogueKpi.nom}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{row.cible}</TableCell>
+                          <TableCell className="text-muted-foreground">{unite ?? '—'}</TableCell>
+                          {gestionParPoids && (
+                            <TableCell className="text-right tabular-nums">{row.poids}%</TableCell>
+                          )}
+                          <TableCell>
+                            <Badge className={STATUT_MAP[row.statut]?.className ?? 'bg-muted'}>
+                              {STATUT_MAP[row.statut]?.label ?? row.statut}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{fmt(row.realise_cumule)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="tabular-nums">{fmt(row.realise_mois_courant)}</span>
+                              {statutSaisie && (
+                                <Badge className={`${statutSaisie.className} text-[10px] px-1 py-0 w-fit`}>
+                                  {statutSaisie.label}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.taux_atteinte != null ? (
+                              <NotationBadge taux={row.taux_atteinte} showTaux variant="text" />
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.statut === 'NOTIFIE' && (
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-1 border-green-200 text-green-700 hover:bg-green-50 dark:border-green-900 dark:text-green-400"
+                                  onClick={() => handleAccepter(row)}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  Accepter
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-1 border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-900 dark:text-amber-400"
+                                  onClick={() => openContester(row)}
+                                >
+                                  <AlertCircle className="h-3.5 w-3.5" />
+                                  Contester
+                                </Button>
+                              </div>
+                            )}
+                            {(row.statut === 'MAINTENU' || row.statut === 'REVISE') && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => handleAccepter(row)}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                                Valider
+                              </Button>
+                            )}
+                            {row.statut === 'VALIDE' && (
+                              <Button variant="default" size="sm" asChild className="gap-1">
+                                <Link href={`/saisie?kpiEmployeId=${row.id}`}>
+                                  <FileInput className="h-3.5 w-3.5" />
+                                  Saisir
+                                </Link>
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
 
-      {list.some((k) => k.statut === 'CONTESTE') && (
-        <Card className="border-amber-200 dark:border-amber-800">
-          <CardHeader>
+      {showPerformance && (
+        <EmployePerformanceSection
+          kpiList={list}
+          performance={performance}
+          periodeCode={periodeCode}
+          gestionParPoids={gestionParPoids}
+          gradientId="scoreMoisGradientMesKpi"
+        />
+      )}
+
+      {list.some((k) => k.statut === 'CONTESTE' || k.reponse_contestation) && (
+        <Card className="border-amber-200 dark:border-amber-800 overflow-hidden">
+          <CardHeader className="bg-amber-500/5 border-b border-amber-500/10">
             <CardTitle className="text-base flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              Contestations en attente de réponse
+              <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              Contestations
             </CardTitle>
             <CardDescription>
-              Les KPI suivants ont été contestés. La réponse du manager s&apos;affiche lorsqu&apos;elle est disponible.
+              Suivi de vos contestations et des réponses de votre manager
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="pt-4 space-y-3">
             {list
               .filter((k) => k.statut === 'CONTESTE' || k.reponse_contestation)
-              .map((row) => (
-                <div key={row.id} className="rounded-lg border p-4 space-y-2">
-                  <p className="font-medium">{row.catalogueKpi.nom}</p>
+              .map((row, idx) => (
+                <div
+                  key={row.id}
+                  className={cn(
+                    'rounded-lg border p-4 space-y-2',
+                    idx % 2 === 1 ? 'bg-muted/30' : 'bg-background'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="font-medium">{row.catalogueKpi.nom}</p>
+                    <Badge className={STATUT_MAP[row.statut]?.className ?? 'bg-muted'}>
+                      {STATUT_MAP[row.statut]?.label ?? row.statut}
+                    </Badge>
+                  </div>
                   {row.motif_contestation && (
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">Votre motif :</span> {row.motif_contestation}
-                    </p>
+                    <div className="rounded-md bg-muted/50 p-3 text-sm">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Votre motif</p>
+                      <p className="leading-relaxed">{row.motif_contestation}</p>
+                    </div>
                   )}
                   {row.reponse_contestation && (
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium">Réponse du manager :</span> {row.reponse_contestation}
-                    </p>
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
+                      <p className="text-xs font-medium text-primary mb-1">Réponse du manager</p>
+                      <p className="leading-relaxed">{row.reponse_contestation}</p>
+                    </div>
                   )}
                 </div>
               ))}
@@ -317,7 +479,10 @@ export default function MesKpiPage() {
       <Dialog open={!!contesterModal} onOpenChange={(o) => !o && (setContesterModal(null), setMotif(''))}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Contester ce KPI</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+              Contester ce KPI
+            </DialogTitle>
             {contesterModal && (
               <p className="text-sm text-muted-foreground">{contesterModal.catalogueKpi.nom}</p>
             )}
@@ -332,7 +497,10 @@ export default function MesKpiPage() {
                   onChange={(e) => setMotif(e.target.value)}
                   placeholder="Expliquez les raisons de votre contestation..."
                 />
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className={cn(
+                  'text-xs mt-1',
+                  motif.length >= 50 ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'
+                )}>
                   {motif.length} / 50 caractères
                 </p>
               </div>
@@ -343,6 +511,7 @@ export default function MesKpiPage() {
                 <Button
                   onClick={handleContester}
                   disabled={motif.trim().length < 50 || submitting}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
                 >
                   {submitting ? 'Envoi...' : 'Envoyer la contestation'}
                 </Button>
