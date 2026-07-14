@@ -76,7 +76,7 @@ export const etablissementUpdateSchema = z.object({
 })
 
 export const directionCatalogueKpiAssignSchema = z.object({
-  catalogueKpiId: z.number().int().positive(),
+  catalogueKpiId: z.coerce.number().int().positive(),
 })
 
 export type DirectionCreateInput = z.infer<typeof directionCreateSchema>

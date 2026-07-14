@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireDG, getSessionAndRequireDirecteur } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { directionCatalogueKpiAssignSchema } from '@/lib/validations/organisation'
-import { listDirectionCatalogueKpis } from '@/lib/direction-catalogue-kpi'
+import {
+  listDirectionCatalogueKpis,
+  catalogueKpiSelect,
+} from '@/lib/direction-catalogue-kpi'
 
 async function parseDirectionId(params: Promise<{ id: string }>) {
   const id = parseInt((await params).id, 10)
@@ -109,27 +112,23 @@ export async function POST(
 
     const userId = (result.session!.user as { id?: string }).id
     const creeParId = userId ? parseInt(userId, 10) : null
+    let creeParIdValid: number | undefined
+    if (creeParId != null && !Number.isNaN(creeParId)) {
+      const creeur = await prisma.user.findUnique({
+        where: { id: creeParId },
+        select: { id: true },
+      })
+      if (creeur) creeParIdValid = creeur.id
+    }
 
     const created = await prisma.directionCatalogueKpi.create({
       data: {
         directionId,
         catalogueKpiId: parsed.data.catalogueKpiId,
-        creeParId: creeParId != null && !Number.isNaN(creeParId) ? creeParId : undefined,
+        ...(creeParIdValid != null ? { creeParId: creeParIdValid } : {}),
       },
       include: {
-        catalogueKpi: {
-          select: {
-            id: true,
-            code: true,
-            nom: true,
-            description: true,
-            type: true,
-            frequence: true,
-            unite: true,
-            categorie: true,
-            actif: true,
-          },
-        },
+        catalogueKpi: { select: catalogueKpiSelect },
       },
     })
 
@@ -142,8 +141,41 @@ export async function POST(
       removeBlockedReason: null,
     })
   } catch (e) {
+    console.error('[KPI-CATALOGUE] Affectation échouée:', e)
+    const code =
+      e && typeof e === 'object' && 'code' in e ? String((e as { code: unknown }).code) : null
+    const message = e instanceof Error ? e.message : String(e)
+
+    if (code === 'P2021' || code === 'P2022') {
+      return NextResponse.json(
+        {
+          error:
+            'Schéma base de données incomplet. Relancez le déploiement Coolify pour appliquer les migrations (prisma migrate deploy).',
+          details: message,
+          code,
+        },
+        { status: 500 }
+      )
+    }
+    if (code === 'P2002') {
+      return NextResponse.json(
+        { error: 'Ce KPI est déjà affecté à cette direction', code },
+        { status: 409 }
+      )
+    }
+    if (code === 'P2003') {
+      return NextResponse.json(
+        {
+          error: 'Référence invalide (direction, KPI ou utilisateur).',
+          details: message,
+          code,
+        },
+        { status: 400 }
+      )
+    }
+
     return NextResponse.json(
-      { error: 'Erreur lors de l\'affectation', details: e instanceof Error ? e.message : e },
+      { error: "Erreur lors de l'affectation", details: message },
       { status: 500 }
     )
   }

@@ -15,6 +15,8 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
 function isPrismaClientStale(client: PrismaClient): boolean {
   const userDelegate = client.user as unknown as { fields?: Record<string, unknown> }
   if (!('saisieDirection' in client)) return true
+  if (!('directionCatalogueKpi' in client)) return true
+  if (!('notationGrilleNiveau' in client)) return true
   if (userDelegate.fields && !('posteOccupe' in userDelegate.fields)) return true
   return false
 }

@@ -210,7 +210,15 @@ export default function DirectionEditPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast({ title: 'Erreur', description: data?.error ?? 'Affectation impossible', variant: 'destructive' })
+        const detail =
+          typeof data?.details === 'string' && data.details.trim()
+            ? ` — ${data.details}`
+            : ''
+        toast({
+          title: 'Erreur',
+          description: `${data?.error ?? 'Affectation impossible'}${detail}`,
+          variant: 'destructive',
+        })
         return
       }
       setKpiList((prev) => [...prev, data].sort((a, b) =>
