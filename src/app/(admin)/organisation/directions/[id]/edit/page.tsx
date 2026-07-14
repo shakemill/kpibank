@@ -163,14 +163,19 @@ export default function DirectionEditPage() {
     Promise.all([fetchDirection(), fetchKpiList()]).finally(() => setLoading(false))
   }, [directionId, fetchDirection, fetchKpiList, router])
 
-  const assignedIds = useMemo(
-    () => new Set(kpiList.map((k) => k.catalogueKpiId)),
-    [kpiList]
-  )
+  const assignedIds = useMemo(() => {
+    const ids = new Set<number>()
+    for (const k of kpiList) {
+      const id = Number(k.catalogueKpiId ?? k.catalogueKpi?.id)
+      if (!Number.isNaN(id) && id > 0) ids.add(id)
+    }
+    return ids
+  }, [kpiList])
 
   const pickerItems = useMemo(() => {
     return catalogue.filter((c) => {
-      if (assignedIds.has(c.id)) return false
+      const catalogueId = Number(c.id)
+      if (Number.isNaN(catalogueId) || assignedIds.has(catalogueId)) return false
       if (!pickerSearch.trim()) return true
       return kpiCorrespondRecherche(
         { nom: c.nom, code: c.code, description: c.description, objectif_qualite: null },
@@ -201,12 +206,22 @@ export default function DirectionEditPage() {
   }
 
   const handleAssign = async (catalogueKpiId: number) => {
-    setAssigningId(catalogueKpiId)
+    if (assigningId != null) return
+    const id = Number(catalogueKpiId)
+    if (Number.isNaN(id) || id <= 0) {
+      toast({ title: 'Erreur', description: 'Identifiant KPI invalide', variant: 'destructive' })
+      return
+    }
+    if (assignedIds.has(id)) {
+      toast({ title: 'Ce KPI est déjà dans la liste' })
+      return
+    }
+    setAssigningId(id)
     try {
       const res = await fetch(`/api/organisation/directions/${directionId}/kpi-catalogue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ catalogueKpiId }),
+        body: JSON.stringify({ catalogueKpiId: id }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -221,12 +236,8 @@ export default function DirectionEditPage() {
         })
         return
       }
-      setKpiList((prev) => [...prev, data].sort((a, b) =>
-        a.catalogueKpi.nom.localeCompare(b.catalogueKpi.nom, undefined, { sensitivity: 'base' })
-      ))
-      setDirection((d) =>
-        d ? { ...d, _count: { ...d._count, catalogueKpis: d._count.catalogueKpis + 1 } } : d
-      )
+      await fetchKpiList()
+      await fetchDirection()
       toast({ title: 'KPI affecté à la direction' })
     } finally {
       setAssigningId(null)

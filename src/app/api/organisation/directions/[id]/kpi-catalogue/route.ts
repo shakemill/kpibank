@@ -5,6 +5,7 @@ import { directionCatalogueKpiAssignSchema } from '@/lib/validations/organisatio
 import {
   listDirectionCatalogueKpis,
   catalogueKpiSelect,
+  canRemoveDirectionCatalogueKpi,
 } from '@/lib/direction-catalogue-kpi'
 
 async function parseDirectionId(params: Promise<{ id: string }>) {
@@ -85,9 +86,10 @@ export async function POST(
       return NextResponse.json({ error: 'Direction introuvable' }, { status: 404 })
     }
 
+    const catalogueKpiId = parsed.data.catalogueKpiId
     const catalogue = await prisma.catalogueKpi.findUnique({
-      where: { id: parsed.data.catalogueKpiId },
-      select: { id: true, actif: true, portee: true },
+      where: { id: catalogueKpiId },
+      select: catalogueKpiSelect,
     })
     if (!catalogue) {
       return NextResponse.json({ error: 'KPI catalogue introuvable' }, { status: 404 })
@@ -95,19 +97,26 @@ export async function POST(
     if (!catalogue.actif) {
       return NextResponse.json({ error: 'Ce KPI catalogue est inactif' }, { status: 400 })
     }
-    const existing = await prisma.directionCatalogueKpi.findUnique({
-      where: {
-        directionId_catalogueKpiId: {
-          directionId,
-          catalogueKpiId: parsed.data.catalogueKpiId,
-        },
-      },
+
+    const toResponse = async (row: { id: number; catalogueKpiId: number; createdAt: Date }) => {
+      const check = await canRemoveDirectionCatalogueKpi(directionId, row.catalogueKpiId)
+      return {
+        id: row.id,
+        catalogueKpiId: row.catalogueKpiId,
+        createdAt: row.createdAt,
+        catalogueKpi: catalogue,
+        canRemove: check.allowed,
+        removeBlockedReason: check.reason ?? null,
+      }
+    }
+
+    // Idempotent : si déjà lié, renvoyer le lien existant (évite les faux 409).
+    const existing = await prisma.directionCatalogueKpi.findFirst({
+      where: { directionId, catalogueKpiId },
+      select: { id: true, catalogueKpiId: true, createdAt: true },
     })
     if (existing) {
-      return NextResponse.json(
-        { error: 'Ce KPI est déjà affecté à cette direction' },
-        { status: 409 }
-      )
+      return NextResponse.json(await toResponse(existing))
     }
 
     const userId = (result.session!.user as { id?: string }).id
@@ -121,25 +130,46 @@ export async function POST(
       if (creeur) creeParIdValid = creeur.id
     }
 
-    const created = await prisma.directionCatalogueKpi.create({
-      data: {
-        directionId,
-        catalogueKpiId: parsed.data.catalogueKpiId,
-        ...(creeParIdValid != null ? { creeParId: creeParIdValid } : {}),
-      },
-      include: {
-        catalogueKpi: { select: catalogueKpiSelect },
-      },
-    })
-
-    return NextResponse.json({
-      id: created.id,
-      catalogueKpiId: created.catalogueKpiId,
-      createdAt: created.createdAt,
-      catalogueKpi: created.catalogueKpi,
-      canRemove: true,
-      removeBlockedReason: null,
-    })
+    try {
+      const created = await prisma.directionCatalogueKpi.create({
+        data: {
+          directionId,
+          catalogueKpiId,
+          ...(creeParIdValid != null ? { creeParId: creeParIdValid } : {}),
+        },
+        select: { id: true, catalogueKpiId: true, createdAt: true },
+      })
+      return NextResponse.json(await toResponse(created))
+    } catch (createErr) {
+      const code =
+        createErr && typeof createErr === 'object' && 'code' in createErr
+          ? String((createErr as { code: unknown }).code)
+          : null
+      // Course concurrente : un autre appel a créé le même lien entre-temps.
+      if (code === 'P2002') {
+        const raced = await prisma.directionCatalogueKpi.findFirst({
+          where: { directionId, catalogueKpiId },
+          select: { id: true, catalogueKpiId: true, createdAt: true },
+        })
+        if (raced) {
+          return NextResponse.json(await toResponse(raced))
+        }
+        const meta =
+          createErr && typeof createErr === 'object' && 'meta' in createErr
+            ? (createErr as { meta?: { target?: string[] } }).meta
+            : undefined
+        return NextResponse.json(
+          {
+            error: 'Contrainte d’unicité violée lors de l’affectation',
+            details: createErr instanceof Error ? createErr.message : String(createErr),
+            code,
+            target: meta?.target ?? null,
+          },
+          { status: 409 }
+        )
+      }
+      throw createErr
+    }
   } catch (e) {
     console.error('[KPI-CATALOGUE] Affectation échouée:', e)
     const code =
@@ -155,12 +185,6 @@ export async function POST(
           code,
         },
         { status: 500 }
-      )
-    }
-    if (code === 'P2002') {
-      return NextResponse.json(
-        { error: 'Ce KPI est déjà affecté à cette direction', code },
-        { status: 409 }
       )
     }
     if (code === 'P2003') {
