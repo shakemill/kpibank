@@ -326,27 +326,63 @@ export default function ManagerEquipePage() {
         </div>
       </div>
 
-      {(data.alertes.employesSansKpi.length > 0 || data.alertes.saisiesManquantes.length > 0) && (
-        <Card className="border-amber-500/50 bg-amber-500/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="h-5 w-5" />
-              Alertes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {data.alertes.employesSansKpi.length > 0 && (
-              <p className="text-sm">
-                <strong>Employés sans aucun KPI assigné :</strong>{' '}
-                {data.alertes.employesSansKpi.map((e) => `${e.prenom} ${e.nom}`).join(', ')}
+      {data.alertes.employesSansKpi.length > 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="pt-5 pb-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="h-11 w-11 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-amber-700 dark:text-amber-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Sans KPI assigné
+                  </p>
+                  <p className="text-3xl font-bold tabular-nums mt-0.5">
+                    {data.alertes.employesSansKpi.length}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    collaborateur{data.alertes.employesSansKpi.length > 1 ? 's' : ''} sans aucun KPI
+                    sur {data.periodeCode}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <Button variant="outline" asChild className="gap-2">
+                  <Link
+                    href={`/manager/equipe/sans-kpi${periodeId != null ? `?periodeId=${periodeId}` : ''}`}
+                  >
+                    <Eye className="h-4 w-4" />
+                    Voir le tableau
+                  </Link>
+                </Button>
+                <Button asChild className="gap-2">
+                  <Link href="/manager/assignation">
+                    <Target className="h-4 w-4" />
+                    Définir les KPI
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {data.alertes.saisiesManquantes.length > 0 && data.alertes.employesSansKpi.length === 0 && (
+        <Card className="border-border/60">
+          <CardContent className="pt-5 pb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Saisies manquantes ou en retard</p>
+              <p className="text-2xl font-bold tabular-nums mt-0.5">
+                {data.alertes.saisiesManquantes.length}
               </p>
-            )}
-            {data.alertes.saisiesManquantes.length > 0 && (
-              <p className="text-sm">
-                <strong>Saisies manquantes ou en retard :</strong>{' '}
-                {data.alertes.saisiesManquantes.map((e) => `${e.prenom} ${e.nom}`).join(', ')}
-              </p>
-            )}
+            </div>
+            <Button variant="outline" asChild className="gap-2">
+              <Link href="/manager/validation">
+                <CheckCircle className="h-4 w-4" />
+                Relancer / valider
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       )}

@@ -38,15 +38,33 @@ import {
   Loader2,
   Lock,
   MessageSquare,
+  Paperclip,
   PenLine,
   Save,
   Send,
   Star,
   Target,
   TrendingUp,
+  Upload,
+  X,
   XCircle,
 } from 'lucide-react'
 import { calculerTauxAtteinte, getStatutSaisie, isSaisieModifiable, libellerRealisePeriode, type ModeAgregation, type SensCalculKpi, type TypeKpi } from '@/lib/saisie-utils'
+
+function nomFichierPreuve(url: string): string {
+  try {
+    const last = decodeURIComponent(url.split('/').pop() ?? '')
+    // timestamp-token-basename.ext → afficher basename.ext si possible
+    const m = last.match(/^\d+-[a-f0-9]+-(.+)$/i)
+    return (m?.[1] ?? last) || 'Fichier'
+  } catch {
+    return 'Fichier'
+  }
+}
+
+function isPreuveFichier(value: string): boolean {
+  return value.startsWith('/uploads/') || /^https?:\/\//i.test(value)
+}
 
 const MOIS_LABELS: Record<number, string> = {
   1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril', 5: 'Mai', 6: 'Juin',
@@ -253,6 +271,7 @@ export default function SaisiePage() {
   const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState<FormValues>({})
   const [mounted, setMounted] = useState(false)
+  const [uploadingPreuves, setUploadingPreuves] = useState<Record<number, boolean>>({})
 
   useEffect(() => {
     setMounted(true)
@@ -344,6 +363,29 @@ export default function SaisiePage() {
     }))
   }
 
+  const handleUploadPreuve = async (kpiEmployeId: number, file: File | null) => {
+    if (!file) return
+    setUploadingPreuves((prev) => ({ ...prev, [kpiEmployeId]: true }))
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/saisies/preuves', { method: 'POST', body: fd })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast({
+          title: 'Erreur',
+          description: data?.error ?? 'Échec de l’envoi du fichier',
+          variant: 'destructive',
+        })
+        return
+      }
+      setFormKpi(kpiEmployeId, 'preuves', data.url as string)
+      toast({ title: 'Fichier joint', description: data.filename ?? file.name })
+    } finally {
+      setUploadingPreuves((prev) => ({ ...prev, [kpiEmployeId]: false }))
+    }
+  }
+
   const getValeurNum = (kpiEmployeId: number): number | null => {
     const v = form[kpiEmployeId]?.valeur?.trim?.()
     if (v == null || v === '') return null
@@ -364,7 +406,7 @@ export default function SaisiePage() {
       const val = getValeurNum(k.id)
       if (val == null) return { nom: k.catalogueKpi.nom, champ: 'valeur' }
       if (k.catalogueKpi.type === 'QUALITATIF' && !(form[k.id]?.commentaire?.trim())) return { nom: k.catalogueKpi.nom, champ: 'Source de la note (obligatoire)' }
-      if (k.catalogueKpi.type === 'COMPORTEMENTAL' && !(form[k.id]?.preuves?.trim())) return { nom: k.catalogueKpi.nom, champ: 'Preuves (obligatoire)' }
+      if (k.catalogueKpi.type === 'COMPORTEMENTAL' && !(form[k.id]?.preuves?.trim())) return { nom: k.catalogueKpi.nom, champ: 'Fichier de preuve (obligatoire)' }
       return null
     })
     .filter((x): x is { nom: string; champ: string } => x != null)
@@ -924,30 +966,156 @@ export default function SaisiePage() {
 
                       <div className="space-y-1 min-w-0">
                         <Label className="flex items-center gap-1.5 text-xs font-medium">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           {type === 'COMPORTEMENTAL' ? 'Preuves' : 'Preuves (optionnel)'}
                           {type === 'COMPORTEMENTAL' && (
                             <span className="text-destructive text-xs font-normal">*</span>
                           )}
                         </Label>
-                        {type === 'COMPORTEMENTAL' ? (
-                          <Textarea
-                            value={form[k.id]?.preuves ?? ''}
-                            onChange={(e) => setFormKpi(k.id, 'preuves', e.target.value)}
-                            disabled={readOnly}
-                            placeholder="Justifier le niveau déclaré"
-                            rows={2}
-                            className="min-h-[40px] text-sm resize-none"
-                          />
-                        ) : (
-                          <Input
-                            value={form[k.id]?.preuves ?? ''}
-                            onChange={(e) => setFormKpi(k.id, 'preuves', e.target.value)}
-                            disabled={readOnly}
-                            placeholder="Lien ou référence"
-                            className="h-9 w-full"
-                          />
-                        )}
+                        {(() => {
+                          const preuveVal = form[k.id]?.preuves?.trim() ?? ''
+                          const uploading = Boolean(uploadingPreuves[k.id])
+                          const hasFile = preuveVal && isPreuveFichier(preuveVal)
+                          const hasLegacyText = preuveVal && !isPreuveFichier(preuveVal)
+
+                          if (readOnly) {
+                            if (!preuveVal) {
+                              return (
+                                <p className="text-xs text-muted-foreground py-2">Aucune preuve jointe</p>
+                              )
+                            }
+                            if (hasFile) {
+                              return (
+                                <a
+                                  href={preuveVal}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-sm hover:bg-muted/40 transition-colors min-w-0"
+                                >
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
+                                    <FileText className="h-4 w-4" />
+                                  </span>
+                                  <span className="truncate min-w-0 flex-1 font-medium text-foreground">
+                                    {nomFichierPreuve(preuveVal)}
+                                  </span>
+                                  <span className="text-[11px] text-muted-foreground shrink-0">Ouvrir</span>
+                                </a>
+                              )
+                            }
+                            return (
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                                {preuveVal}
+                              </p>
+                            )
+                          }
+
+                          return (
+                            <div className="space-y-1.5">
+                              {hasLegacyText && (
+                                <p className="text-xs text-muted-foreground break-words rounded-md border border-dashed px-2 py-1.5">
+                                  Ancienne référence : {preuveVal}
+                                </p>
+                              )}
+                              {hasFile ? (
+                                <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 min-w-0">
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 shrink-0">
+                                    <FileText className="h-4 w-4" />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <a
+                                      href={preuveVal}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block truncate text-sm font-medium text-foreground hover:underline"
+                                    >
+                                      {nomFichierPreuve(preuveVal)}
+                                    </a>
+                                    <p className="text-[11px] text-muted-foreground">Fichier joint — cliquer pour ouvrir</p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                                    onClick={() => setFormKpi(k.id, 'preuves', '')}
+                                    aria-label="Retirer le fichier"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <label
+                                  className={cn(
+                                    'relative flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-3 py-4 text-center transition-colors cursor-pointer',
+                                    uploading
+                                      ? 'border-primary/40 bg-primary/5 pointer-events-none'
+                                      : 'border-border/70 bg-muted/10 hover:border-primary/50 hover:bg-muted/25'
+                                  )}
+                                  onDragOver={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                  }}
+                                  onDrop={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    if (uploading) return
+                                    const file = e.dataTransfer.files?.[0] ?? null
+                                    void handleUploadPreuve(k.id, file)
+                                  }}
+                                >
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                                    disabled={uploading}
+                                    className="sr-only"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0] ?? null
+                                      e.target.value = ''
+                                      void handleUploadPreuve(k.id, file)
+                                    }}
+                                  />
+                                  {uploading ? (
+                                    <>
+                                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                      <span className="text-xs font-medium text-foreground">Envoi en cours…</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                        <Upload className="h-4 w-4" />
+                                      </span>
+                                      <span className="text-xs font-medium text-foreground">
+                                        Glisser un fichier ou{' '}
+                                        <span className="text-primary underline-offset-2 hover:underline">
+                                          parcourir
+                                        </span>
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground leading-tight">
+                                        PDF, image, Word, Excel — max. 5 Mo
+                                      </span>
+                                    </>
+                                  )}
+                                </label>
+                              )}
+                              {hasFile && (
+                                <label className="inline-flex cursor-pointer text-[11px] text-primary hover:underline">
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                                    disabled={uploading}
+                                    className="sr-only"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0] ?? null
+                                      e.target.value = ''
+                                      void handleUploadPreuve(k.id, file)
+                                    }}
+                                  />
+                                  Remplacer le fichier
+                                </label>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
                   </div>

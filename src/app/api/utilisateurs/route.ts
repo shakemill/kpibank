@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import type { Prisma, Role } from '@/generated/prisma/client'
 import { userCreateSchema } from '@/lib/validations/organisation'
 import { sendMail } from '@/lib/mailer'
-import { getEtablissementNom } from '@/lib/etablissement'
+import { getEtablissementEmailBrand } from '@/lib/etablissement'
 import { templateNouveauCompte } from '@/lib/email-templates'
 import { generateRandomPassword } from '@/lib/password-utils'
 import {
@@ -169,9 +169,9 @@ export async function POST(request: NextRequest) {
     })
 
     try {
-      const nomEtablissement = await getEtablissementNom()
+      const brand = await getEtablissementEmailBrand()
       const emailHtml = templateNouveauCompte(
-        nomEtablissement,
+        brand,
         user.prenom,
         user.email,
         tempPassword

@@ -30,3 +30,7 @@ yarn-error.log*
 next-env.d.ts
 /src/generated/prisma
 .env*.local
+
+# fichiers joints (preuves saisie)
+/public/uploads/preuves/**
+!/public/uploads/preuves/.gitkeep

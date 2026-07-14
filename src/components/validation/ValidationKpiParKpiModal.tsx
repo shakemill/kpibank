@@ -28,11 +28,25 @@ import { Badge } from '@/components/ui/badge'
 import { NotationBadge } from '@/components/notation/NotationBadge'
 import { formaterNomKpiAffichage } from '@/lib/kpi-cible-utils'
 import { cn } from '@/lib/utils'
-import { Check, ChevronLeft, ChevronRight, Pencil, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, FileText, MessageSquare, Paperclip, Pencil, X } from 'lucide-react'
 
 const MOIS_LABELS: Record<number, string> = {
   1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril', 5: 'Mai', 6: 'Juin',
   7: 'Juillet', 8: 'Août', 9: 'Septembre', 10: 'Octobre', 11: 'Novembre', 12: 'Décembre',
+}
+
+function nomFichierPreuve(url: string): string {
+  try {
+    const last = decodeURIComponent(url.split('/').pop() ?? '')
+    const m = last.match(/^\d+-[a-f0-9]+-(.+)$/i)
+    return (m?.[1] ?? last) || 'Fichier'
+  } catch {
+    return 'Fichier'
+  }
+}
+
+function isPreuveFichier(value: string): boolean {
+  return value.startsWith('/uploads/') || /^https?:\/\//i.test(value)
 }
 
 export type SaisieValidation = {
@@ -45,6 +59,8 @@ export type SaisieValidation = {
   valeur_affichée: number
   taux: number
   soumis_le: string | null
+  commentaire: string | null
+  preuves: string | null
   employe: { id: number; nom: string; prenom: string; email: string }
   kpiEmploye: {
     id: number
@@ -278,6 +294,50 @@ export function ValidationKpiParKpiModal({
                         </span>
                       )}
                     </div>
+
+                    {(current.commentaire?.trim() || current.preuves?.trim()) && (
+                      <div className="space-y-2 pt-1 border-t border-border/50">
+                        {current.commentaire?.trim() && (
+                          <div className="rounded-lg bg-background border px-3 py-2.5 space-y-1">
+                            <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                              <MessageSquare className="h-3 w-3" />
+                              Commentaire
+                            </p>
+                            <p className="text-sm leading-snug whitespace-pre-wrap break-words">
+                              {current.commentaire.trim()}
+                            </p>
+                          </div>
+                        )}
+                        {current.preuves?.trim() && (
+                          <div className="rounded-lg bg-background border px-3 py-2.5 space-y-1.5">
+                            <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                              <Paperclip className="h-3 w-3" />
+                              Preuve jointe
+                            </p>
+                            {isPreuveFichier(current.preuves.trim()) ? (
+                              <a
+                                href={current.preuves.trim()}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2 text-sm hover:bg-muted/40 transition-colors min-w-0"
+                              >
+                                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
+                                  <FileText className="h-3.5 w-3.5" />
+                                </span>
+                                <span className="truncate min-w-0 flex-1 font-medium">
+                                  {nomFichierPreuve(current.preuves.trim())}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground shrink-0">Ouvrir</span>
+                              </a>
+                            ) : (
+                              <p className="text-sm leading-snug whitespace-pre-wrap break-words text-muted-foreground">
+                                {current.preuves.trim()}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between gap-2">

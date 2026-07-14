@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { sendMail } from '@/lib/mailer'
-import { getEtablissementNom } from '@/lib/etablissement'
+import { getEtablissementEmailBrand } from '@/lib/etablissement'
 import { templateRenvoiMotDePasse } from '@/lib/email-templates'
 import { generateRandomPassword } from '@/lib/password-utils'
 import bcrypt from 'bcryptjs'
@@ -49,12 +49,12 @@ export async function POST(
       },
     })
 
-    const nomEtablissement = await getEtablissementNom()
+    const brand = await getEtablissementEmailBrand()
     await sendMail({
       to: user.email,
       subject: `Système KPI — Nouveau mot de passe`,
       html: templateRenvoiMotDePasse(
-        nomEtablissement,
+        brand,
         user.prenom,
         user.email,
         tempPassword,

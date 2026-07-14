@@ -1,4 +1,26 @@
-const baseUrl = process.env.NEXTAUTH_URL ?? ''
+import type { EtablissementEmailBrand } from '@/lib/etablissement'
+
+const baseUrl = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '')
+
+const COLORS = {
+  pageBg: '#f3f4f6',
+  cardBg: '#ffffff',
+  text: '#1f2937',
+  muted: '#6b7280',
+  border: '#e5e7eb',
+  primary: '#1F4E79',
+  primaryBtn: '#1F4E79',
+  danger: '#b91c1c',
+  dangerBg: '#fef2f2',
+  softBg: '#f8fafc',
+}
+
+export type EmailBrand = EtablissementEmailBrand | string
+
+function resolveBrand(brand: EmailBrand): EtablissementEmailBrand {
+  if (typeof brand === 'string') return { nom: brand, logoUrl: null }
+  return { nom: brand.nom, logoUrl: brand.logoUrl ?? null }
+}
 
 function escapeHtml(text: string): string {
   return text
@@ -8,6 +30,111 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;')
 }
 
+function ctaButton(href: string, label: string, variant: 'primary' | 'danger' = 'primary'): string {
+  const bg = variant === 'danger' ? COLORS.danger : COLORS.primaryBtn
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 28px auto 8px;">
+      <tr>
+        <td style="border-radius: 6px; background: ${bg};">
+          <a href="${href}"
+             style="display: inline-block; padding: 12px 28px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 14px; letter-spacing: 0.01em;">
+            ${escapeHtml(label)}
+          </a>
+        </td>
+      </tr>
+    </table>
+  `
+}
+
+function infoCard(innerHtml: string, accent: string = COLORS.primary): string {
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0;">
+      <tr>
+        <td style="background: ${COLORS.softBg}; border: 1px solid ${COLORS.border}; border-left: 3px solid ${accent}; border-radius: 6px; padding: 16px 18px;">
+          ${innerHtml}
+        </td>
+      </tr>
+    </table>
+  `
+}
+
+/**
+ * Enveloppe commune : fond gris clair, carte blanche, logo sur bandeau blanc, style professionnel épuré.
+ */
+export function wrapEmailLayout(
+  brandInput: EmailBrand,
+  opts: {
+    title: string
+    bodyHtml: string
+    footerNote?: string
+    preheader?: string
+  }
+): string {
+  const brand = resolveBrand(brandInput)
+  const nom = escapeHtml(brand.nom)
+  const title = escapeHtml(opts.title)
+  const footer =
+    opts.footerNote ??
+    'Cet e-mail est envoyé automatiquement par le Système KPI. Merci de ne pas y répondre.'
+  const preheader = opts.preheader
+    ? `<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(opts.preheader)}</div>`
+    : ''
+
+  const logoBlock = brand.logoUrl
+    ? `<img src="${escapeHtml(brand.logoUrl)}" alt="${nom}" width="160" style="display:block;margin:0 auto;max-width:160px;max-height:56px;width:auto;height:auto;border:0;outline:none;text-decoration:none;" />`
+    : `<p style="margin:0;font-size:18px;font-weight:700;color:${COLORS.primary};letter-spacing:-0.02em;">${nom}</p>`
+
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background:${COLORS.pageBg};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+  ${preheader}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${COLORS.pageBg};padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:${COLORS.cardBg};border-radius:10px;overflow:hidden;border:1px solid ${COLORS.border};box-shadow:0 1px 2px rgba(16,24,40,0.04);">
+          <!-- Header logo -->
+          <tr>
+            <td align="center" style="background:#ffffff;padding:28px 32px 20px;border-bottom:1px solid ${COLORS.border};">
+              ${logoBlock}
+              <p style="margin:12px 0 0;font-size:12px;line-height:1.4;color:${COLORS.muted};letter-spacing:0.04em;text-transform:uppercase;">
+                Système KPI · ${nom}
+              </p>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 36px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:${COLORS.text};">
+              <h1 style="margin:0 0 18px;font-size:20px;line-height:1.35;font-weight:700;color:${COLORS.primary};letter-spacing:-0.01em;">
+                ${title}
+              </h1>
+              ${opts.bodyHtml}
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:18px 36px 24px;background:#fafafa;border-top:1px solid ${COLORS.border};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              <p style="margin:0;font-size:12px;line-height:1.5;color:${COLORS.muted};text-align:center;">
+                ${escapeHtml(footer)}
+              </p>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:16px 0 0;font-size:11px;color:#9ca3af;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+          ${nom}
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
 export type KpiRecapEmailRow = {
   nom: string
   cible: number
@@ -15,38 +142,26 @@ export type KpiRecapEmailRow = {
   poids: number
 }
 
-export function templateRappelSaisie(nomEtablissement: string, prenom: string, mois: string, dateLimite: string) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #1F4E79; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 18px;">
-          Système KPI — ${nomEtablissement}
-        </h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9;">
-        <h2 style="color: #1F4E79;">Rappel : Saisie KPI de ${mois}</h2>
-        <p>Bonjour <strong>${prenom}</strong>,</p>
-        <p>Vous avez jusqu'au <strong>${dateLimite}</strong> pour saisir 
-           vos réalisations KPI du mois de <strong>${mois}</strong>.</p>
-        <p>Merci de vous connecter dès que possible pour éviter 
-           que vos saisies soient marquées comme manquantes.</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${baseUrl}/saisie"
-             style="background: #2E75B6; color: white; padding: 12px 24px; 
-                    text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Accéder à ma saisie
-          </a>
-        </div>
-        <p style="color: #888; font-size: 12px;">
-          Cet email est envoyé automatiquement par le Système KPI.
-        </p>
-      </div>
-    </div>
-  `
+export function templateRappelSaisie(
+  brand: EmailBrand,
+  prenom: string,
+  mois: string,
+  dateLimite: string
+) {
+  return wrapEmailLayout(brand, {
+    title: `Rappel : saisie KPI de ${mois}`,
+    preheader: `Saisissez vos KPI avant le ${dateLimite}`,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Bonjour <strong>${escapeHtml(prenom)}</strong>,</p>
+      <p style="margin:0 0 12px;">Vous avez jusqu'au <strong>${escapeHtml(dateLimite)}</strong> pour saisir vos réalisations KPI du mois de <strong>${escapeHtml(mois)}</strong>.</p>
+      <p style="margin:0;">Merci de vous connecter dès que possible pour éviter que vos saisies soient marquées comme manquantes.</p>
+      ${ctaButton(`${baseUrl}/saisie`, 'Accéder à ma saisie')}
+    `,
+  })
 }
 
 export function templateKpiNotifie(
-  nomEtablissement: string,
+  brand: EmailBrand,
   prenom: string,
   managerNom: string,
   periodeCode: string,
@@ -58,12 +173,12 @@ export function templateKpiNotifie(
     .map((k) => {
       const cibleLabel = `${Number(k.cible).toFixed(1)}${k.unite ? ` ${escapeHtml(k.unite)}` : ''}`
       const poidsCell = afficherPoids
-        ? `<td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${k.poids > 0 ? `${k.poids}%` : '—'}</td>`
+        ? `<td style="padding:10px 12px;border-bottom:1px solid ${COLORS.border};text-align:right;color:${COLORS.text};">${k.poids > 0 ? `${k.poids}%` : '—'}</td>`
         : ''
       return `
         <tr>
-          <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(k.nom)}</td>
-          <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${cibleLabel}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid ${COLORS.border};color:${COLORS.text};">${escapeHtml(k.nom)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid ${COLORS.border};text-align:right;color:${COLORS.text};">${cibleLabel}</td>
           ${poidsCell}
         </tr>
       `
@@ -71,83 +186,58 @@ export function templateKpiNotifie(
     .join('')
 
   const colonnePoids = afficherPoids
-    ? '<th style="padding: 10px 12px; text-align: right; border-bottom: 2px solid #1F4E79;">Poids</th>'
+    ? `<th style="padding:10px 12px;text-align:right;border-bottom:2px solid ${COLORS.border};color:${COLORS.muted};font-size:12px;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Poids</th>`
     : ''
 
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #1F4E79; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 18px;">
-          Système KPI — ${escapeHtml(nomEtablissement)}
-        </h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9;">
-        <h2 style="color: #1F4E79;">Vos KPI ont été assignés</h2>
-        <p>Bonjour <strong>${escapeHtml(prenom)}</strong>,</p>
-        <p><strong>${escapeHtml(managerNom)}</strong> vous a assigné
-           <strong>${nombreKpi} KPI</strong> pour la période
-           <strong>${escapeHtml(periodeCode)}</strong>.</p>
-        <p>Voici le récapitulatif de vos objectifs. Veuillez les accepter ou les contester dans les 3 jours.</p>
-        <table style="width: 100%; border-collapse: collapse; background: white; margin: 20px 0; font-size: 14px;">
-          <thead>
-            <tr style="background: #eef4fa;">
-              <th style="padding: 10px 12px; text-align: left; border-bottom: 2px solid #1F4E79;">Indicateur</th>
-              <th style="padding: 10px 12px; text-align: right; border-bottom: 2px solid #1F4E79;">Cible</th>
-              ${colonnePoids}
-            </tr>
-          </thead>
-          <tbody>
-            ${lignesKpi}
-          </tbody>
-        </table>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${baseUrl}/employe/mes-kpi"
-             style="background: #2E75B6; color: white; padding: 12px 24px;
-                    text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Valider mes KPI
-          </a>
-        </div>
-        <p style="color: #888; font-size: 12px;">
-          Cet email est envoyé automatiquement par le Système KPI.
-        </p>
-      </div>
-    </div>
-  `
+  return wrapEmailLayout(brand, {
+    title: 'Vos KPI ont été assignés',
+    preheader: `${nombreKpi} KPI pour ${periodeCode}`,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Bonjour <strong>${escapeHtml(prenom)}</strong>,</p>
+      <p style="margin:0 0 12px;"><strong>${escapeHtml(managerNom)}</strong> vous a assigné
+         <strong>${nombreKpi} KPI</strong> pour la période
+         <strong>${escapeHtml(periodeCode)}</strong>.</p>
+      <p style="margin:0 0 8px;">Voici le récapitulatif de vos objectifs. Veuillez les accepter ou les contester dans les 3 jours.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:16px 0 8px;font-size:14px;border:1px solid ${COLORS.border};border-radius:6px;overflow:hidden;">
+        <thead>
+          <tr style="background:${COLORS.softBg};">
+            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid ${COLORS.border};color:${COLORS.muted};font-size:12px;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Indicateur</th>
+            <th style="padding:10px 12px;text-align:right;border-bottom:2px solid ${COLORS.border};color:${COLORS.muted};font-size:12px;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Cible</th>
+            ${colonnePoids}
+          </tr>
+        </thead>
+        <tbody>
+          ${lignesKpi}
+        </tbody>
+      </table>
+      ${ctaButton(`${baseUrl}/employe/mes-kpi`, 'Valider mes KPI')}
+    `,
+  })
 }
 
-export function templateSaisieValidee(nomEtablissement: string, prenom: string, mois: string, score: number) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #1F4E79; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 18px;">
-          Système KPI — ${nomEtablissement}
-        </h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9;">
-        <h2 style="color: #1F4E79;">Saisie validée ✅</h2>
-        <p>Bonjour <strong>${prenom}</strong>,</p>
-        <p>Votre saisie KPI du mois de <strong>${mois}</strong> 
-           a été validée par votre manager.</p>
-        <div style="background: white; border-left: 4px solid #2E75B6; 
-                    padding: 15px; margin: 20px 0;">
-          <p style="margin: 0; font-size: 24px; color: #1F4E79; font-weight: bold;">
-            Score du mois : ${score.toFixed(1)}%
-          </p>
-        </div>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${baseUrl}/dashboard/employe"
-             style="background: #2E75B6; color: white; padding: 12px 24px; 
-                    text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Voir mon tableau de bord
-          </a>
-        </div>
-      </div>
-    </div>
-  `
+export function templateSaisieValidee(
+  brand: EmailBrand,
+  prenom: string,
+  mois: string,
+  score: number
+) {
+  return wrapEmailLayout(brand, {
+    title: 'Saisie validée',
+    preheader: `Score du mois : ${score.toFixed(1)}%`,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Bonjour <strong>${escapeHtml(prenom)}</strong>,</p>
+      <p style="margin:0;">Votre saisie KPI du mois de <strong>${escapeHtml(mois)}</strong> a été validée par votre manager.</p>
+      ${infoCard(`
+        <p style="margin:0 0 4px;font-size:12px;color:${COLORS.muted};text-transform:uppercase;letter-spacing:0.04em;">Score du mois</p>
+        <p style="margin:0;font-size:28px;line-height:1.2;color:${COLORS.primary};font-weight:700;">${score.toFixed(1)}%</p>
+      `)}
+      ${ctaButton(`${baseUrl}/dashboard/employe`, 'Voir mon tableau de bord')}
+    `,
+  })
 }
 
 export function templateKpiReponseContestation(
-  nomEtablissement: string,
+  brand: EmailBrand,
   prenomEmploye: string,
   managerNom: string,
   nomKpi: string,
@@ -165,186 +255,141 @@ export function templateKpiReponseContestation(
 
   const revisionBlock =
     decision === 'REVISE' && cible != null
-      ? `
-        <div style="background: white; border-left: 4px solid #2E75B6; padding: 15px; margin: 20px 0;">
-          <p style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Nouveaux objectifs :</p>
-          <p style="margin: 0; font-size: 16px; color: #1F4E79; font-weight: bold;">
+      ? infoCard(`
+          <p style="margin:0 0 6px;font-size:12px;color:${COLORS.muted};text-transform:uppercase;letter-spacing:0.04em;">Nouveaux objectifs</p>
+          <p style="margin:0;font-size:16px;color:${COLORS.primary};font-weight:700;">
             Cible : ${Number(cible).toFixed(1)}${poids != null && poids > 0 ? ` · Poids : ${poids}%` : ''}
           </p>
-        </div>
-      `
+        `)
       : ''
 
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #1F4E79; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 18px;">
-          Système KPI — ${escapeHtml(nomEtablissement)}
-        </h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9;">
-        <h2 style="color: #1F4E79;">${titreDecision}</h2>
-        <p>Bonjour <strong>${escapeHtml(prenomEmploye)}</strong>,</p>
-        <p>${intro}</p>
-        <p style="margin: 16px 0 8px 0;"><strong>KPI :</strong> ${escapeHtml(nomKpi)}</p>
-        <div style="background: white; border-left: 4px solid #1F4E79; padding: 15px; margin: 20px 0;">
-          <p style="margin: 0 0 8px 0; font-size: 14px; color: #555;">Réponse de votre manager :</p>
-          <p style="margin: 0; font-style: italic; color: #333; white-space: pre-wrap;">${escapeHtml(reponse)}</p>
-        </div>
-        ${revisionBlock}
-        <p>Vous pouvez dès maintenant saisir vos réalisations pour ce KPI.</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${baseUrl}/saisie"
-             style="background: #2E75B6; color: white; padding: 12px 24px;
-                    text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Saisir mes réalisations
-          </a>
-        </div>
-        <p style="color: #888; font-size: 12px;">
-          Cet email est envoyé automatiquement par le Système KPI.
-        </p>
-      </div>
-    </div>
-  `
+  return wrapEmailLayout(brand, {
+    title: titreDecision,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Bonjour <strong>${escapeHtml(prenomEmploye)}</strong>,</p>
+      <p style="margin:0 0 12px;">${intro}</p>
+      <p style="margin:0 0 8px;"><strong>KPI :</strong> ${escapeHtml(nomKpi)}</p>
+      ${infoCard(`
+        <p style="margin:0 0 8px;font-size:12px;color:${COLORS.muted};text-transform:uppercase;letter-spacing:0.04em;">Réponse de votre manager</p>
+        <p style="margin:0;font-style:italic;color:${COLORS.text};white-space:pre-wrap;">${escapeHtml(reponse)}</p>
+      `)}
+      ${revisionBlock}
+      <p style="margin:0;">Vous pouvez dès maintenant saisir vos réalisations pour ce KPI.</p>
+      ${ctaButton(`${baseUrl}/saisie`, 'Saisir mes réalisations')}
+    `,
+  })
 }
 
 export function templateKpiConteste(
-  nomEtablissement: string,
+  brand: EmailBrand,
   prenomManager: string,
   prenomEmploye: string,
   nomKpi: string,
   motif: string
 ) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #1F4E79; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 18px;">
-          Système KPI — ${nomEtablissement}
-        </h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9;">
-        <h2 style="color: #C00000;">KPI contesté ⚠️</h2>
-        <p>Bonjour <strong>${prenomManager}</strong>,</p>
-        <p><strong>${prenomEmploye}</strong> a contesté le KPI 
-           <strong>"${nomKpi}"</strong>.</p>
-        <div style="background: #fff3f3; border-left: 4px solid #C00000; 
-                    padding: 15px; margin: 20px 0;">
-          <p style="margin: 0; font-style: italic; color: #333;">
-            "${motif}"
-          </p>
-        </div>
-        <p>Vous avez 5 jours ouvrés pour répondre à cette contestation.</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${baseUrl}/manager/assignation/contestations"
-             style="background: #C00000; color: white; padding: 12px 24px; 
-                    text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Traiter la contestation
-          </a>
-        </div>
-      </div>
-    </div>
-  `
+  return wrapEmailLayout(brand, {
+    title: 'KPI contesté',
+    preheader: `${prenomEmploye} a contesté un KPI`,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Bonjour <strong>${escapeHtml(prenomManager)}</strong>,</p>
+      <p style="margin:0 0 12px;"><strong>${escapeHtml(prenomEmploye)}</strong> a contesté le KPI
+         <strong>« ${escapeHtml(nomKpi)} »</strong>.</p>
+      ${infoCard(
+        `
+        <p style="margin:0 0 6px;font-size:12px;color:${COLORS.muted};text-transform:uppercase;letter-spacing:0.04em;">Motif</p>
+        <p style="margin:0;font-style:italic;color:${COLORS.text};">« ${escapeHtml(motif)} »</p>
+      `,
+        COLORS.danger
+      )}
+      <p style="margin:0;">Vous avez 5 jours ouvrés pour répondre à cette contestation.</p>
+      ${ctaButton(`${baseUrl}/manager/assignation/contestations`, 'Traiter la contestation', 'danger')}
+    `,
+  })
 }
 
 export function templateNouveauCompte(
-  nomEtablissement: string,
+  brand: EmailBrand,
   prenom: string,
   email: string,
   motDePasseTemporaire: string
 ) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #1F4E79; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 18px;">
-          Système KPI — ${nomEtablissement}
-        </h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9;">
-        <h2 style="color: #1F4E79;">Votre compte a été créé</h2>
-        <p>Bonjour <strong>${prenom || email}</strong>,</p>
-        <p>Un compte utilisateur a été créé pour vous dans le Système KPI de <strong>${nomEtablissement}</strong>.</p>
-        <p>Voici vos identifiants de connexion :</p>
-        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
-          <p style="margin: 0 0 10px 0;"><strong>Email :</strong> ${email}</p>
-          <p style="margin: 0;"><strong>Mot de passe temporaire :</strong> <code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 14px;">${motDePasseTemporaire}</code></p>
-        </div>
-        <p><strong>Important :</strong> Vous serez invité à modifier ce mot de passe lors de votre première connexion.</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${baseUrl}/login"
-             style="background: #2E75B6; color: white; padding: 12px 24px; 
-                    text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Se connecter
-          </a>
-        </div>
-        <p style="color: #888; font-size: 12px;">
-          Cet email est envoyé automatiquement par le Système KPI. Conservez ces identifiants en lieu sûr.
+  const nom = typeof brand === 'string' ? brand : brand.nom
+  return wrapEmailLayout(brand, {
+    title: 'Votre compte a été créé',
+    preheader: 'Vos identifiants de connexion',
+    footerNote:
+      'Cet e-mail est envoyé automatiquement par le Système KPI. Conservez ces identifiants en lieu sûr.',
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Bonjour <strong>${escapeHtml(prenom || email)}</strong>,</p>
+      <p style="margin:0 0 12px;">Un compte utilisateur a été créé pour vous dans le Système KPI de <strong>${escapeHtml(nom)}</strong>.</p>
+      <p style="margin:0 0 8px;">Voici vos identifiants de connexion :</p>
+      ${infoCard(`
+        <p style="margin:0 0 10px;"><strong>Email :</strong> ${escapeHtml(email)}</p>
+        <p style="margin:0;"><strong>Mot de passe temporaire :</strong>
+          <code style="background:#ffffff;border:1px solid ${COLORS.border};padding:3px 8px;border-radius:4px;font-size:13px;display:inline-block;">${escapeHtml(motDePasseTemporaire)}</code>
         </p>
-      </div>
-    </div>
-  `
+      `)}
+      <p style="margin:0;"><strong>Important :</strong> Vous serez invité à modifier ce mot de passe lors de votre première connexion.</p>
+      ${ctaButton(`${baseUrl}/login`, 'Se connecter')}
+    `,
+  })
 }
 
 export function templateRenvoiMotDePasse(
-  nomEtablissement: string,
+  brand: EmailBrand,
   prenom: string,
   email: string,
-  motDePasseTemporaire: string,
+  motDePasseTemporaire: string
 ) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #1F4E79; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 18px;">
-          Système KPI — ${nomEtablissement}
-        </h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9;">
-        <h2 style="color: #1F4E79;">Nouveau mot de passe</h2>
-        <p>Bonjour <strong>${prenom || email}</strong>,</p>
-        <p>Un nouveau mot de passe temporaire a été généré pour votre compte du Système KPI de <strong>${nomEtablissement}</strong>.</p>
-        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
-          <p style="margin: 0 0 10px 0;"><strong>Email :</strong> ${email}</p>
-          <p style="margin: 0;"><strong>Mot de passe temporaire :</strong> <code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 14px;">${motDePasseTemporaire}</code></p>
-        </div>
-        <p><strong>Important :</strong> Votre ancien mot de passe n&apos;est plus valide. Vous devrez le modifier lors de votre prochaine connexion.</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${baseUrl}/login"
-             style="background: #2E75B6; color: white; padding: 12px 24px; 
-                    text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Se connecter
-          </a>
-        </div>
-        <p style="color: #888; font-size: 12px;">
-          Si vous n&apos;êtes pas à l&apos;origine de cette demande, contactez votre administrateur.
+  const nom = typeof brand === 'string' ? brand : brand.nom
+  return wrapEmailLayout(brand, {
+    title: 'Nouveau mot de passe',
+    preheader: 'Mot de passe temporaire généré',
+    footerNote:
+      "Si vous n'êtes pas à l'origine de cette demande, contactez votre administrateur.",
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Bonjour <strong>${escapeHtml(prenom || email)}</strong>,</p>
+      <p style="margin:0 0 12px;">Un nouveau mot de passe temporaire a été généré pour votre compte du Système KPI de <strong>${escapeHtml(nom)}</strong>.</p>
+      ${infoCard(`
+        <p style="margin:0 0 10px;"><strong>Email :</strong> ${escapeHtml(email)}</p>
+        <p style="margin:0;"><strong>Mot de passe temporaire :</strong>
+          <code style="background:#ffffff;border:1px solid ${COLORS.border};padding:3px 8px;border-radius:4px;font-size:13px;display:inline-block;">${escapeHtml(motDePasseTemporaire)}</code>
         </p>
-      </div>
-    </div>
-  `
+      `)}
+      <p style="margin:0;"><strong>Important :</strong> Votre ancien mot de passe n&apos;est plus valide. Vous devrez le modifier lors de votre prochaine connexion.</p>
+      ${ctaButton(`${baseUrl}/login`, 'Se connecter')}
+    `,
+  })
 }
 
-export function templateSaisieEnRetard(nomEtablissement: string, prenom: string, mois: string, managerNom: string) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #1F4E79; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 18px;">
-          Système KPI — ${nomEtablissement}
-        </h1>
-      </div>
-      <div style="padding: 30px; background: #f9f9f9;">
-        <h2 style="color: #C00000;">Saisie en retard ⚠️</h2>
-        <p>Bonjour <strong>${prenom}</strong>,</p>
-        <p>La date limite de saisie pour le mois de <strong>${mois}</strong> 
-           est dépassée. Votre manager <strong>${managerNom}</strong> 
-           a été informé.</p>
-        <p>Veuillez saisir vos réalisations dès que possible. 
-           Une saisie non effectuée sera comptabilisée comme 0%.</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${baseUrl}/saisie"
-             style="background: #C00000; color: white; padding: 12px 24px; 
-                    text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Saisir maintenant
-          </a>
-        </div>
-      </div>
-    </div>
-  `
+export function templateSaisieEnRetard(
+  brand: EmailBrand,
+  prenom: string,
+  mois: string,
+  managerNom: string
+) {
+  return wrapEmailLayout(brand, {
+    title: 'Saisie en retard',
+    preheader: `Date limite dépassée pour ${mois}`,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Bonjour <strong>${escapeHtml(prenom)}</strong>,</p>
+      <p style="margin:0 0 12px;">La date limite de saisie pour le mois de <strong>${escapeHtml(mois)}</strong>
+         est dépassée. Votre manager <strong>${escapeHtml(managerNom)}</strong>
+         a été informé.</p>
+      <p style="margin:0;">Veuillez saisir vos réalisations dès que possible.
+         Une saisie non effectuée sera comptabilisée comme 0%.</p>
+      ${ctaButton(`${baseUrl}/saisie`, 'Saisir maintenant', 'danger')}
+    `,
+  })
+}
+
+export function templateTestEmail(brand: EmailBrand) {
+  return wrapEmailLayout(brand, {
+    title: "Test d'envoi",
+    preheader: 'Configuration SMTP OK',
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Ce message confirme que la configuration SMTP du Système KPI fonctionne correctement.</p>
+      <p style="margin:0;color:${COLORS.muted};font-size:13px;">Envoyé le ${new Date().toLocaleString('fr-FR')}</p>
+    `,
+  })
 }

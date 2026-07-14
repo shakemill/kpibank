@@ -2,7 +2,7 @@ import type { TypeNotification } from '@/generated/prisma/client'
 import { formaterNomKpiAffichage } from '@/lib/kpi-cible-utils'
 import { prisma } from '@/lib/prisma'
 import { sendMail } from '@/lib/mailer'
-import { getEtablissementNom } from '@/lib/etablissement'
+import { getEtablissementEmailBrand } from '@/lib/etablissement'
 import {
   templateRappelSaisie,
   templateKpiNotifie,
@@ -69,19 +69,19 @@ export async function notifierKpisEmploye(
   await createNotification(employeId, 'KPI_NOTIFIE', titre, message, lien)
 
   try {
-    const [user, nomEtablissement] = await Promise.all([
+    const [user, brand] = await Promise.all([
       prisma.user.findUnique({
         where: { id: employeId },
         select: { email: true, prenom: true },
       }),
-      getEtablissementNom(),
+      getEtablissementEmailBrand(),
     ])
     if (user?.email) {
       await sendMail({
         to: user.email,
         subject: `${titre} — ${periodeCode}`,
         html: templateKpiNotifie(
-          nomEtablissement,
+          brand,
           user.prenom ?? 'Collaborateur',
           assignateurNom,
           periodeCode,
@@ -156,7 +156,7 @@ export async function notifierRappelSaisie(mois: number, annee: number): Promise
     ? periodes[0].date_limite_saisie.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
     : `${mois}/${annee}`
   const moisLabel = new Date(annee, mois - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
-  const nomEtablissement = await getEtablissementNom()
+  const brand = await getEtablissementEmailBrand()
   let count = 0
   for (const userId of userIds) {
     await createNotification(userId, 'RAPPEL_SAISIE', titre, message, lien)
@@ -169,7 +169,7 @@ export async function notifierRappelSaisie(mois: number, annee: number): Promise
         await sendMail({
           to: user.email,
           subject: titre,
-          html: templateRappelSaisie(nomEtablissement, user.prenom ?? 'Collaborateur', moisLabel, dateLimiteStr),
+          html: templateRappelSaisie(brand, user.prenom ?? 'Collaborateur', moisLabel, dateLimiteStr),
         })
       }
     } catch (_e) {
@@ -189,7 +189,7 @@ export async function notifierSaisieEnRetard(mois: number, annee: number): Promi
   const message = `La date limite de saisie pour ${mois}/${annee} est dépassée. Merci de soumettre votre saisie au plus vite.`
   const lien = '/saisie'
   const moisLabel = new Date(annee, mois - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
-  const nomEtablissement = await getEtablissementNom()
+  const brand = await getEtablissementEmailBrand()
   let count = 0
   for (const userId of userIds) {
     await createNotification(userId, 'SAISIE_EN_RETARD', titre, message, lien)
@@ -210,7 +210,7 @@ export async function notifierSaisieEnRetard(mois: number, annee: number): Promi
         await sendMail({
           to: user.email,
           subject: titre,
-          html: templateSaisieEnRetard(nomEtablissement, user.prenom ?? 'Collaborateur', moisLabel, managerNom),
+          html: templateSaisieEnRetard(brand, user.prenom ?? 'Collaborateur', moisLabel, managerNom),
         })
       }
     } catch (_e) {
@@ -248,19 +248,19 @@ export async function notifierKpiConteste(managerId: number, kpiEmployeId: numbe
         catalogueKpi: { select: { nom: true } },
       },
     })
-    const [manager, nomEtablissement] = await Promise.all([
+    const [manager, brand] = await Promise.all([
       prisma.user.findUnique({
         where: { id: managerId },
         select: { email: true, prenom: true },
       }),
-      getEtablissementNom(),
+      getEtablissementEmailBrand(),
     ])
     if (manager?.email && ke) {
       await sendMail({
         to: manager.email,
         subject: titre,
         html: templateKpiConteste(
-          nomEtablissement,
+          brand,
           manager.prenom ?? 'Manager',
           ke.employe.prenom ?? 'Collaborateur',
           ke.catalogueKpi.nom,
@@ -289,18 +289,18 @@ export async function notifierSaisieValidee(
   const lien = '/saisie'
   await createNotification(employeId, 'SAISIE_SOUMISE', titre, message, lien)
   try {
-    const [user, nomEtablissement] = await Promise.all([
+    const [user, brand] = await Promise.all([
       prisma.user.findUnique({
         where: { id: employeId },
         select: { email: true, prenom: true },
       }),
-      getEtablissementNom(),
+      getEtablissementEmailBrand(),
     ])
     if (user?.email) {
       await sendMail({
         to: user.email,
         subject: titre,
-        html: templateSaisieValidee(nomEtablissement, user.prenom ?? 'Collaborateur', moisLabel, score),
+        html: templateSaisieValidee(brand, user.prenom ?? 'Collaborateur', moisLabel, score),
       })
     }
   } catch (_e) {
@@ -343,7 +343,7 @@ export async function notifierEmployeReponseContestation(
   await createNotification(userId, type, titre, message, lien)
 
   try {
-    const [kpi, user, nomEtablissement] = await Promise.all([
+    const [kpi, user, brand] = await Promise.all([
       prisma.kpiEmploye.findUnique({
         where: { id: kpiEmployeId },
         select: {
@@ -358,7 +358,7 @@ export async function notifierEmployeReponseContestation(
         where: { id: userId },
         select: { email: true, prenom: true },
       }),
-      getEtablissementNom(),
+      getEtablissementEmailBrand(),
     ])
 
     if (user?.email && kpi?.reponse_contestation) {
@@ -369,7 +369,7 @@ export async function notifierEmployeReponseContestation(
         to: user.email,
         subject: titre,
         html: templateKpiReponseContestation(
-          nomEtablissement,
+          brand,
           user.prenom ?? 'Collaborateur',
           managerNom,
           formaterNomKpiAffichage(kpi.catalogueKpi.nom),
