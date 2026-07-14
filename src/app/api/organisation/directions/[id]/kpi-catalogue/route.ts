@@ -130,23 +130,57 @@ export async function POST(
       if (creeur) creeParIdValid = creeur.id
     }
 
-    try {
-      const created = await prisma.directionCatalogueKpi.create({
-        data: {
-          directionId,
-          catalogueKpiId,
-          ...(creeParIdValid != null ? { creeParId: creeParIdValid } : {}),
-        },
+    const createData = {
+      directionId,
+      catalogueKpiId,
+      ...(creeParIdValid != null ? { creeParId: creeParIdValid } : {}),
+    }
+
+    const createRow = () =>
+      prisma.directionCatalogueKpi.create({
+        data: createData,
         select: { id: true, catalogueKpiId: true, createdAt: true },
       })
+
+    const resyncIdSequence = async () => {
+      await prisma.$executeRawUnsafe(`
+        SELECT setval(
+          pg_get_serial_sequence('"DirectionCatalogueKpi"', 'id'),
+          GREATEST(COALESCE((SELECT MAX(id) FROM "DirectionCatalogueKpi"), 1), 1),
+          true
+        )
+      `)
+    }
+
+    try {
+      const created = await createRow()
       return NextResponse.json(await toResponse(created))
     } catch (createErr) {
       const code =
         createErr && typeof createErr === 'object' && 'code' in createErr
           ? String((createErr as { code: unknown }).code)
           : null
-      // Course concurrente : un autre appel a créé le même lien entre-temps.
+      const meta =
+        createErr && typeof createErr === 'object' && 'meta' in createErr
+          ? (createErr as { meta?: { target?: string[] } }).meta
+          : undefined
+      const target = meta?.target ?? []
+      const message = createErr instanceof Error ? createErr.message : String(createErr)
+
       if (code === 'P2002') {
+        // Séquence SERIAL désynchronisée après imports/seed → resync + retry.
+        if (target.includes('id') || message.includes('(`id`)') || message.includes('("id")')) {
+          console.warn('[KPI-CATALOGUE] Séquence id désync, resynchronisation…')
+          await resyncIdSequence()
+          try {
+            const retried = await createRow()
+            return NextResponse.json(await toResponse(retried))
+          } catch (retryErr) {
+            console.error('[KPI-CATALOGUE] Retry après resync échoué:', retryErr)
+          }
+        }
+
+        // Course concurrente : un autre appel a créé le même lien entre-temps.
         const raced = await prisma.directionCatalogueKpi.findFirst({
           where: { directionId, catalogueKpiId },
           select: { id: true, catalogueKpiId: true, createdAt: true },
@@ -154,16 +188,12 @@ export async function POST(
         if (raced) {
           return NextResponse.json(await toResponse(raced))
         }
-        const meta =
-          createErr && typeof createErr === 'object' && 'meta' in createErr
-            ? (createErr as { meta?: { target?: string[] } }).meta
-            : undefined
         return NextResponse.json(
           {
-            error: 'Contrainte d’unicité violée lors de l’affectation',
-            details: createErr instanceof Error ? createErr.message : String(createErr),
+            error: "Contrainte d'unicité violée lors de l'affectation",
+            details: message,
             code,
-            target: meta?.target ?? null,
+            target,
           },
           { status: 409 }
         )
