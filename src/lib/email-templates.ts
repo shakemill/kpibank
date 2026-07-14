@@ -81,7 +81,7 @@ export function wrapEmailLayout(
     : ''
 
   const logoBlock = brand.logoUrl
-    ? `<img src="${escapeHtml(brand.logoUrl)}" alt="${nom}" width="160" style="display:block;margin:0 auto;max-width:160px;max-height:56px;width:auto;height:auto;border:0;outline:none;text-decoration:none;" />`
+    ? `<img src="${brand.logoUrl.startsWith('cid:') ? brand.logoUrl : escapeHtml(brand.logoUrl)}" alt="${nom}" width="160" height="56" style="display:block;margin:0 auto;max-width:160px;max-height:56px;width:auto;height:auto;border:0;outline:none;text-decoration:none;" />`
     : `<p style="margin:0;font-size:18px;font-weight:700;color:${COLORS.primary};letter-spacing:-0.02em;">${nom}</p>`
 
   return `<!DOCTYPE html>
