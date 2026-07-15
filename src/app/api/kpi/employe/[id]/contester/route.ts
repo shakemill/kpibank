@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { kpiEmployeContesterSchema } from '@/lib/validations/kpi'
 import { notifierKpiConteste } from '@/lib/notifications'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -52,6 +53,13 @@ export async function POST(
       data: { statut: 'CONTESTE', motif_contestation: parsed.data.motif },
     })
     await notifierKpiConteste(existing.assigneParId, id)
+    await auditFromRequest(request, {
+      userId: (session.user as { id?: string }).id,
+      action: AuditAction.KPI_CONTEST,
+      entityType: 'KpiEmploye',
+      entityId: id,
+      details: parsed.data.motif ? `motif=${parsed.data.motif.slice(0, 200)}` : undefined,
+    })
     return NextResponse.json({ success: true })
   } catch (e) {
     return NextResponse.json(

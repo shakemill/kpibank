@@ -15,6 +15,7 @@ import {
 import { saisieDirectionCreateOrUpdateSchema } from '@/lib/validations/saisie'
 import { canAccessKpiDirection, getDirectionIdForSaisie } from '@/lib/saisie-direction-access'
 import { apiSuccess, apiError } from '@/lib/api-response'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function GET(request: NextRequest) {
   const result = await getSessionAndRequireDirecteur()
@@ -328,6 +329,13 @@ export async function POST(request: NextRequest) {
           },
         },
       })
+      await auditFromRequest(request, {
+        userId: user.id,
+        action: AuditAction.SAISIE_DIR_SAVE,
+        entityType: 'SaisieDirection',
+        entityId: updated.id,
+        details: `kpiDirectionId=${parsed.data.kpiDirectionId} · ${parsed.data.mois}/${parsed.data.annee}`,
+      })
       return apiSuccess(updated)
     }
 
@@ -347,6 +355,13 @@ export async function POST(request: NextRequest) {
           },
         },
       },
+    })
+    await auditFromRequest(request, {
+      userId: user.id,
+      action: AuditAction.SAISIE_DIR_SAVE,
+      entityType: 'SaisieDirection',
+      entityId: created.id,
+      details: `kpiDirectionId=${parsed.data.kpiDirectionId} · ${parsed.data.mois}/${parsed.data.annee}`,
     })
     return apiSuccess(created)
   } catch (e) {

@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { prisma } from '@/lib/prisma'
+import { AuditAction, createAuditLog } from '@/lib/audit-log'
 
 const ROLE_DASHBOARD: Record<string, string> = {
   DG: '/dashboard/dg',
@@ -37,6 +38,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const { allowed } = checkRateLimit(`auth:${email}`)
         if (!allowed) {
+          await createAuditLog({
+            action: AuditAction.AUTH_LOGIN_FAIL,
+            details: `rate_limit · ${email}`,
+          })
           throw new Error('Trop de tentatives. Réessayez dans 1 minute.')
         }
 
@@ -44,12 +49,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await prisma.user.findUnique({
           where: { email },
         })
-        if (!user) return null
+        if (!user) {
+          await createAuditLog({
+            action: AuditAction.AUTH_LOGIN_FAIL,
+            details: `inconnu · ${email}`,
+          })
+          return null
+        }
         if (!user.actif) {
+          await createAuditLog({
+            userId: user.id,
+            action: AuditAction.AUTH_LOGIN_FAIL,
+            entityType: 'User',
+            entityId: user.id,
+            details: `désactivé · ${email}`,
+          })
           throw new Error('Compte désactivé')
         }
         const valid = await bcrypt.compare(password, user.password)
-        if (!valid) return null
+        if (!valid) {
+          await createAuditLog({
+            userId: user.id,
+            action: AuditAction.AUTH_LOGIN_FAIL,
+            entityType: 'User',
+            entityId: user.id,
+            details: `mdp · ${email}`,
+          })
+          return null
+        }
+
+        await createAuditLog({
+          userId: user.id,
+          action: AuditAction.AUTH_LOGIN_SUCCESS,
+          entityType: 'User',
+          entityId: user.id,
+          details: email,
+        })
 
         const forcePasswordChange = (user as { force_password_change?: boolean }).force_password_change ?? false
         return {

@@ -18,6 +18,7 @@ import {
   moisReferenceDansPeriode,
 } from '@/lib/kpi-realisations'
 import { consolidateEmploye } from '@/lib/consolidation'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 const MANAGER_ROLES = ['MANAGER', 'DG', 'DIRECTEUR', 'CHEF_SERVICE']
 
@@ -346,6 +347,13 @@ export async function POST(request: NextRequest) {
       },
     })
     const newRestant = Math.max(0, poidsRestant - parsed.data.poids)
+    await auditFromRequest(request, {
+      userId: user.id,
+      action: AuditAction.KPI_ASSIGN,
+      entityType: 'KpiEmploye',
+      entityId: kpi.id,
+      details: `employeId=${parsed.data.employeId} · periodeId=${parsed.data.periodeId}`,
+    })
     return NextResponse.json({ ...kpi, poidsRestant: Math.round(newRestant * 100) / 100 })
   } catch (e) {
     return NextResponse.json(

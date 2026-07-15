@@ -17,6 +17,7 @@ import { saisieCreateOrUpdateSchema } from '@/lib/validations/saisie'
 import { canAccessEmployeData } from '@/lib/access-control'
 import { STATUTS_KPI_SAISISSABLES } from '@/lib/kpi-statut'
 import { apiSuccess, apiError } from '@/lib/api-response'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 const MANAGER_ROLES = ['MANAGER', 'DG', 'DIRECTEUR', 'CHEF_SERVICE']
 
@@ -383,6 +384,13 @@ export async function POST(request: NextRequest) {
           },
         },
       })
+      await auditFromRequest(request, {
+        userId,
+        action: AuditAction.SAISIE_SAVE,
+        entityType: 'SaisieMensuelle',
+        entityId: updated.id,
+        details: `kpiEmployeId=${parsed.data.kpiEmployeId} · ${parsed.data.mois}/${parsed.data.annee}`,
+      })
       return apiSuccess(updated)
     }
 
@@ -400,6 +408,13 @@ export async function POST(request: NextRequest) {
           },
         },
       },
+    })
+    await auditFromRequest(request, {
+      userId,
+      action: AuditAction.SAISIE_SAVE,
+      entityType: 'SaisieMensuelle',
+      entityId: created.id,
+      details: `kpiEmployeId=${parsed.data.kpiEmployeId} · ${parsed.data.mois}/${parsed.data.annee}`,
     })
     return apiSuccess(created)
   } catch (e) {

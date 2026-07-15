@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const result = await getSessionAndRequireDG()
@@ -16,6 +17,12 @@ export async function DELETE(
   }
   try {
     await prisma.service.delete({ where: { id } })
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.SERVICE_DELETE,
+      entityType: 'Service',
+      entityId: id,
+    })
     return NextResponse.json({ success: true })
   } catch (e: unknown) {
     const prismaError = e as { code?: string }

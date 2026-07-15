@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function PUT(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const result = await getSessionAndRequireDG()
@@ -18,6 +19,12 @@ export async function PUT(
     await prisma.user.update({
       where: { id },
       data: { actif: true },
+    })
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.USER_ACTIVATE,
+      entityType: 'User',
+      entityId: id,
     })
     return NextResponse.json({ success: true })
   } catch (e) {

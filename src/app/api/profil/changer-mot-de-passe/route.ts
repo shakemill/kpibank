@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { apiSuccess, apiError } from '@/lib/api-response'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 const NOUVEAU_MOT_DE_PASSE_REGEX = /^(?=.*[A-Z])(?=.*\d).{8,}$/
 
@@ -47,6 +48,13 @@ export async function PUT(request: NextRequest) {
       password: hash,
       force_password_change: false,
     },
+  })
+
+  await auditFromRequest(request, {
+    userId,
+    action: AuditAction.PASSWORD_CHANGE,
+    entityType: 'User',
+    entityId: userId,
   })
 
   return apiSuccess({ ok: true })

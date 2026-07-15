@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { validerSaisiesByIds } from '@/lib/saisie-validation'
 import { saisieValiderBatchSchema } from '@/lib/validations/saisie'
 import { apiError, apiSuccess } from '@/lib/api-response'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(request: NextRequest) {
   const result = await getSessionAndRequireManager()
@@ -106,6 +107,13 @@ export async function POST(request: NextRequest) {
       saisies.map((s) => s.id),
       valideParId
     )
+    await auditFromRequest(request, {
+      userId: sessionUser.id,
+      action: AuditAction.SAISIE_VALIDATE_BATCH,
+      entityType: 'SaisieMensuelle',
+      entityId: validatedIds[0],
+      details: `count=${count} · ids=${validatedIds.join(',')}`,
+    })
     return apiSuccess({ count, ids: validatedIds })
   } catch (e) {
     return apiError('Erreur lors de la validation', 500, e instanceof Error ? e.message : e)

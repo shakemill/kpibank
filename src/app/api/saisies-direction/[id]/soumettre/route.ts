@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma'
 import { getStatutSaisie } from '@/lib/saisie-utils'
 import { canAccessKpiDirection } from '@/lib/saisie-direction-access'
 import { apiSuccess, apiError } from '@/lib/api-response'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const result = await getSessionAndRequireDirecteur()
@@ -72,7 +73,14 @@ export async function POST(
             catalogueKpi: { select: { id: true, nom: true, type: true, unite: true } },
           },
         },
-      },
+        },
+      })
+    await auditFromRequest(request, {
+      userId: user.id,
+      action: AuditAction.SAISIE_DIR_SUBMIT,
+      entityType: 'SaisieDirection',
+      entityId: id,
+      details: `${saisie.mois}/${saisie.annee}`,
     })
     return apiSuccess(updated)
   } catch (e) {

@@ -5,6 +5,7 @@ import { saisieAjusterSchema } from '@/lib/validations/saisie'
 import { canAccessEmployeData } from '@/lib/access-control'
 import { apiSuccess, apiError } from '@/lib/api-response'
 import { sanitizeOptionalText } from '@/lib/sanitize'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -76,6 +77,14 @@ export async function POST(
         message: `Votre saisie pour ${saisie.mois}/${saisie.annee} a été ajustée par votre manager. Motif : ${motifAjustement ?? ''}`,
         lien: '/saisie',
       },
+    })
+
+    await auditFromRequest(request, {
+      userId: sessionUser.id,
+      action: AuditAction.SAISIE_ADJUST,
+      entityType: 'SaisieMensuelle',
+      entityId: id,
+      details: motifAjustement ? `motif=${motifAjustement.slice(0, 200)}` : undefined,
     })
 
     return apiSuccess(updated)

@@ -5,10 +5,11 @@ import { sendMail } from '@/lib/mailer'
 import { getEtablissementEmailBrand } from '@/lib/etablissement'
 import { templateRenvoiMotDePasse } from '@/lib/email-templates'
 import { generateRandomPassword } from '@/lib/password-utils'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 import bcrypt from 'bcryptjs'
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const result = await getSessionAndRequireDG()
@@ -59,6 +60,14 @@ export async function POST(
         user.email,
         tempPassword,
       ),
+    })
+
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.USER_PASSWORD_RESEND,
+      entityType: 'User',
+      entityId: user.id,
+      details: user.email,
     })
 
     return NextResponse.json({

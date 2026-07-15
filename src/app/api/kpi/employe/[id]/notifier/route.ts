@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { peutAssignerA } from '@/lib/assignation-rules'
 import { formaterNomKpiAffichage } from '@/lib/kpi-cible-utils'
 import { notifierKpisEmploye } from '@/lib/notifications'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -129,6 +130,14 @@ export async function POST(
       periode.code,
       kpisRecap
     )
+
+    await auditFromRequest(request, {
+      userId: sessionUser.id,
+      action: AuditAction.KPI_NOTIFY,
+      entityType: 'KpiEmploye',
+      entityId: employeId,
+      details: `periodeId=${periodeId} · count=${drafts.length}`,
+    })
 
     return NextResponse.json({ success: true, count: drafts.length })
   } catch (e) {

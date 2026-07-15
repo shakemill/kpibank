@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { canAccessEmployeData } from '@/lib/access-control'
 import { apiSuccess, apiError } from '@/lib/api-response'
 import { finaliserValidationEmployeMois } from '@/lib/saisie-validation'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -54,6 +55,14 @@ export async function POST(
     })
 
     await finaliserValidationEmployeMois(saisie.employeId, saisie.mois, saisie.annee)
+
+    await auditFromRequest(request, {
+      userId: sessionUser.id,
+      action: AuditAction.SAISIE_VALIDATE,
+      entityType: 'SaisieMensuelle',
+      entityId: id,
+      details: `employeId=${saisie.employeId} · ${saisie.mois}/${saisie.annee}`,
+    })
 
     return apiSuccess(updated)
   } catch (e) {

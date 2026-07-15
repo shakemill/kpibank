@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getStatutSaisie } from '@/lib/saisie-utils'
 import { notifierManagerNouvellesSaisies } from '@/lib/notifications'
 import { apiSuccess, apiError } from '@/lib/api-response'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -88,6 +89,14 @@ export async function POST(
     if (saisie.employe.managerId) {
       await notifierManagerNouvellesSaisies(saisie.employe.managerId)
     }
+
+    await auditFromRequest(request, {
+      userId,
+      action: AuditAction.SAISIE_SUBMIT,
+      entityType: 'SaisieMensuelle',
+      entityId: id,
+      details: `${saisie.mois}/${saisie.annee}`,
+    })
 
     return apiSuccess(updated)
   } catch (e) {

@@ -11,6 +11,7 @@ import {
   validerChefService,
 } from '@/lib/service-chef-utils'
 import { normaliserRattachementUtilisateur } from '@/lib/user-org-utils'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 import bcrypt from 'bcryptjs'
 
 export async function PUT(
@@ -130,6 +131,14 @@ export async function PUT(
       previousServiceId: existing.serviceId,
     })
 
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.USER_UPDATE,
+      entityType: 'User',
+      entityId: user.id,
+      details: `${user.email} · ${user.role}`,
+    })
+
     return NextResponse.json({ ...user, password: undefined })
   } catch (e) {
     return NextResponse.json(
@@ -140,7 +149,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const result = await getSessionAndRequireDG()
@@ -151,7 +160,7 @@ export async function DELETE(
   if (Number.isNaN(id)) {
     return NextResponse.json({ error: 'ID invalide' }, { status: 400 })
   }
-  const currentUserIdRaw = (result.session.user as { id?: number | string }).id
+  const currentUserIdRaw = (result.session!.user as { id?: number | string }).id
   const currentUserId = typeof currentUserIdRaw === 'string' ? parseInt(currentUserIdRaw, 10) : currentUserIdRaw
   if (!Number.isNaN(currentUserId) && currentUserId === id) {
     return NextResponse.json(
@@ -161,6 +170,12 @@ export async function DELETE(
   }
   try {
     await prisma.user.delete({ where: { id } })
+    await auditFromRequest(request, {
+      userId: currentUserId,
+      action: AuditAction.USER_DELETE,
+      entityType: 'User',
+      entityId: id,
+    })
     return NextResponse.json({ success: true })
   } catch (e: unknown) {
     const prismaError = e as { code?: string }

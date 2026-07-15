@@ -16,6 +16,7 @@ import {
   validerChefService,
 } from '@/lib/service-chef-utils'
 import { normaliserRattachementUtilisateur } from '@/lib/user-org-utils'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 import bcrypt from 'bcryptjs'
 
 export async function GET(request: NextRequest) {
@@ -184,6 +185,14 @@ export async function POST(request: NextRequest) {
     } catch (mailErr) {
       console.error('[UTILISATEURS] Erreur envoi email nouveau compte:', mailErr)
     }
+
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.USER_CREATE,
+      entityType: 'User',
+      entityId: user.id,
+      details: `${user.email} · ${user.role}`,
+    })
 
     return NextResponse.json({
       ...user,

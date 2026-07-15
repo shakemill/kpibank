@@ -3,6 +3,7 @@ import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { directionCreateSchema } from '@/lib/validations/organisation'
 import { estDirecteurAdjoint } from '@/lib/directeur-adjoint-utils'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function GET(request: NextRequest) {
   const result = await getSessionAndRequireDG()
@@ -118,6 +119,13 @@ export async function POST(request: NextRequest) {
         responsable: { select: { id: true, nom: true, prenom: true, email: true } },
         _count: { select: { services: true, catalogueKpis: true } },
       },
+    })
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.DIRECTION_CREATE,
+      entityType: 'Direction',
+      entityId: direction.id,
+      details: `${direction.nom} (${direction.code})`,
     })
     return NextResponse.json({
       ...direction,

@@ -3,6 +3,7 @@ import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { directionUpdateSchema } from '@/lib/validations/organisation'
 import { trouverDirecteurTitulaire } from '@/lib/directeur-adjoint-utils'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 const directionInclude = {
   responsable: { select: { id: true, nom: true, prenom: true, email: true } },
@@ -76,6 +77,16 @@ export async function PUT(
       include: directionInclude,
     })
     const directeurTitulaire = await trouverDirecteurTitulaire(direction.id)
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action:
+        parsed.data.actif === false
+          ? AuditAction.DIRECTION_DEACTIVATE
+          : AuditAction.DIRECTION_UPDATE,
+      entityType: 'Direction',
+      entityId: direction.id,
+      details: `${direction.nom} (${direction.code})`,
+    })
     return NextResponse.json({ ...direction, directeurTitulaire })
   } catch (e) {
     return NextResponse.json(
@@ -86,7 +97,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const result = await getSessionAndRequireDG()
@@ -101,6 +112,12 @@ export async function DELETE(
     await prisma.direction.update({
       where: { id },
       data: { actif: false },
+    })
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.DIRECTION_DEACTIVATE,
+      entityType: 'Direction',
+      entityId: id,
     })
     return NextResponse.json({ success: true })
   } catch (e) {

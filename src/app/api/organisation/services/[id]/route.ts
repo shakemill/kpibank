@@ -3,6 +3,7 @@ import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { serviceUpdateSchema } from '@/lib/validations/organisation'
 import { trouverChefService } from '@/lib/service-chef-utils'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function PUT(
   request: NextRequest,
@@ -46,6 +47,16 @@ export async function PUT(
       },
     })
     const chefService = await trouverChefService(service.id)
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action:
+        parsed.data.actif === false
+          ? AuditAction.SERVICE_DEACTIVATE
+          : AuditAction.SERVICE_UPDATE,
+      entityType: 'Service',
+      entityId: service.id,
+      details: `${service.nom} (${service.code})`,
+    })
     return NextResponse.json({ ...service, chefService })
   } catch (e) {
     return NextResponse.json(
@@ -56,7 +67,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const result = await getSessionAndRequireDG()
@@ -71,6 +82,12 @@ export async function DELETE(
     await prisma.service.update({
       where: { id },
       data: { actif: false },
+    })
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.SERVICE_DEACTIVATE,
+      entityType: 'Service',
+      entityId: id,
     })
     return NextResponse.json({ success: true })
   } catch (e) {

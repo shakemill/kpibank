@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
@@ -36,6 +37,12 @@ export async function POST(
     await prisma.kpiEmploye.update({
       where: { id },
       data: { statut: 'VALIDE', date_acceptation: now },
+    })
+    await auditFromRequest(request, {
+      userId: (session.user as { id?: string }).id,
+      action: AuditAction.KPI_ACCEPT,
+      entityType: 'KpiEmploye',
+      entityId: id,
     })
     return NextResponse.json({ success: true })
   } catch (e) {

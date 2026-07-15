@@ -3,6 +3,7 @@ import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { serviceCreateSchema } from '@/lib/validations/organisation'
 import { trouverChefService } from '@/lib/service-chef-utils'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function GET(request: NextRequest) {
   const result = await getSessionAndRequireDG()
@@ -95,6 +96,13 @@ export async function POST(request: NextRequest) {
       },
     })
     const chefService = await trouverChefService(service.id)
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.SERVICE_CREATE,
+      entityType: 'Service',
+      entityId: service.id,
+      details: `${service.nom} (${service.code})`,
+    })
     return NextResponse.json({ ...service, chefService })
   } catch (e) {
     return NextResponse.json(

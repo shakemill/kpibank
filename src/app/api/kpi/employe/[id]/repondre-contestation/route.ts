@@ -3,6 +3,7 @@ import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { kpiEmployeRepondreContestationSchema } from '@/lib/validations/kpi'
 import { notifierEmployeReponseContestation } from '@/lib/notifications'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -74,6 +75,13 @@ export async function POST(
       },
     })
     await notifierEmployeReponseContestation(kpi.employe.id, id, decision)
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.KPI_CONTEST_REPLY,
+      entityType: 'KpiEmploye',
+      entityId: id,
+      details: `action=${parsed.data.action}`,
+    })
     return NextResponse.json(kpi)
   } catch (e) {
     return NextResponse.json(

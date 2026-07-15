@@ -3,6 +3,7 @@ import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { saisieRejeterSchema } from '@/lib/validations/saisie'
 import { apiSuccess, apiError } from '@/lib/api-response'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -47,7 +48,14 @@ export async function POST(
             catalogueKpi: { select: { id: true, nom: true, type: true, unite: true } },
           },
         },
-      },
+        },
+      })
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.SAISIE_DIR_REJECT,
+      entityType: 'SaisieDirection',
+      entityId: id,
+      details: parsed.data.motif ? `motif=${parsed.data.motif.slice(0, 200)}` : undefined,
     })
     return apiSuccess(updated)
   } catch (e) {

@@ -3,9 +3,10 @@ import { getSessionAndRequireDG } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { consolidateDirection } from '@/lib/consolidation'
 import { apiSuccess, apiError } from '@/lib/api-response'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const result = await getSessionAndRequireDG()
@@ -59,6 +60,14 @@ export async function POST(
     } catch {
       // consolidation optionnelle
     }
+
+    await auditFromRequest(request, {
+      userId: (result.session!.user as { id?: string }).id,
+      action: AuditAction.SAISIE_DIR_VALIDATE,
+      entityType: 'SaisieDirection',
+      entityId: id,
+      details: `${saisie.mois}/${saisie.annee}`,
+    })
 
     return apiSuccess(updated)
   } catch (e) {

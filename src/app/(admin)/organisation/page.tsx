@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { toast } from '@/hooks/use-toast'
@@ -192,8 +192,10 @@ export default function OrganisationPage() {
   const [usersForSelect, setUsersForSelect] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [directionActifFilter, setDirectionActifFilter] = useState<string>('all')
+  const [directionSearchQuery, setDirectionSearchQuery] = useState('')
   const [serviceDirectionFilter, setServiceDirectionFilter] = useState<string>('all')
   const [serviceActifFilter, setServiceActifFilter] = useState<string>('all')
+  const [serviceSearchQuery, setServiceSearchQuery] = useState('')
   const [userRoleFilter, setUserRoleFilter] = useState<string>('all')
   const [userDirectionFilter, setUserDirectionFilter] = useState<string>('all')
   const [userActifFilter, setUserActifFilter] = useState<string>('all')
@@ -326,6 +328,40 @@ export default function OrganisationPage() {
   }))
   const directionOptions = directions.map((d) => ({ id: d.id, nom: d.nom, code: d.code }))
   const serviceOptions = services.map((s) => ({ id: s.id, nom: s.nom, code: s.code, directionId: s.directionId }))
+
+  const directionsFiltrees = useMemo(() => {
+    const q = directionSearchQuery
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+    if (!q) return directions
+    return directions.filter((d) => {
+      const hay = [d.nom, d.code, d.description ?? '']
+        .join(' ')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+      return hay.includes(q)
+    })
+  }, [directions, directionSearchQuery])
+
+  const servicesFiltres = useMemo(() => {
+    const q = serviceSearchQuery
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+    if (!q) return services
+    return services.filter((s) => {
+      const hay = [s.nom, s.code, s.description ?? '', s.direction.nom, s.direction.code]
+        .join(' ')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+      return hay.includes(q)
+    })
+  }, [services, serviceSearchQuery])
 
   const handleDirectionSubmit = async (values: DirectionCreateInput | DirectionUpdateInput) => {
     const res = await fetch('/api/organisation/directions', {
@@ -737,6 +773,15 @@ export default function OrganisationPage() {
         {tab === 'directions' && (
           <>
             <div className="flex flex-wrap items-center gap-4">
+              <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Rechercher une direction…"
+                  value={directionSearchQuery}
+                  onChange={(e) => setDirectionSearchQuery(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
               <Select value={directionActifFilter} onValueChange={setDirectionActifFilter}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="Statut" />
@@ -754,9 +799,15 @@ export default function OrganisationPage() {
             </div>
             {loading ? (
               <p className="text-muted-foreground">Chargement...</p>
+            ) : directionsFiltrees.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-8 text-center">
+                {directionSearchQuery.trim()
+                  ? 'Aucune direction ne correspond à cette recherche.'
+                  : 'Aucune direction.'}
+              </p>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {directions.map((d) => (
+                {directionsFiltrees.map((d) => (
                   <Card key={d.id} className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/20">
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
@@ -830,6 +881,15 @@ export default function OrganisationPage() {
         {tab === 'services' && (
           <>
             <div className="flex flex-wrap items-center gap-4">
+              <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Rechercher un département ou agence…"
+                  value={serviceSearchQuery}
+                  onChange={(e) => setServiceSearchQuery(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
               <Select value={serviceDirectionFilter} onValueChange={setServiceDirectionFilter}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Toutes les directions" />
@@ -858,9 +918,15 @@ export default function OrganisationPage() {
             </div>
             {loading ? (
               <p className="text-muted-foreground">Chargement...</p>
+            ) : servicesFiltres.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-8 text-center">
+                {serviceSearchQuery.trim()
+                  ? 'Aucun département / agence ne correspond à cette recherche.'
+                  : 'Aucun département / agence.'}
+              </p>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {services.map((s) => (
+                {servicesFiltres.map((s) => (
                   <Card key={s.id} className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/20">
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">

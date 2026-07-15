@@ -5,6 +5,7 @@ import { saisieRejeterSchema } from '@/lib/validations/saisie'
 import { canAccessEmployeData } from '@/lib/access-control'
 import { apiSuccess, apiError } from '@/lib/api-response'
 import { sanitizeOptionalText } from '@/lib/sanitize'
+import { AuditAction, auditFromRequest } from '@/lib/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -72,6 +73,14 @@ export async function POST(
         message: `Votre saisie pour ${saisie.mois}/${saisie.annee} a été rejetée. Motif : ${motif ?? ''}`,
         lien: '/saisie',
       },
+    })
+
+    await auditFromRequest(request, {
+      userId: sessionUser.id,
+      action: AuditAction.SAISIE_REJECT,
+      entityType: 'SaisieMensuelle',
+      entityId: id,
+      details: motif ? `motif=${motif.slice(0, 200)}` : undefined,
     })
 
     return apiSuccess(updated)
