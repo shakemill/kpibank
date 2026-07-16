@@ -11,6 +11,52 @@ export function isSaisieModifiable(statut: string): boolean {
   return (STATUTS_SAISIE_MODIFIABLES as readonly string[]).includes(statut)
 }
 
+/**
+ * Mois de référence pour le statut de saisie d'une période :
+ * mois calendaire s'il est dans la période, sinon le dernier mois de la période.
+ */
+export function moisRefPourPeriode(
+  periode: { mois_debut: number; mois_fin: number; annee: number },
+  moisCalendaire: number,
+  anneeCalendaire: number
+): { mois: number; annee: number } {
+  const dansPeriode =
+    anneeCalendaire === periode.annee &&
+    moisCalendaire >= periode.mois_debut &&
+    moisCalendaire <= periode.mois_fin
+  if (dansPeriode) return { mois: moisCalendaire, annee: anneeCalendaire }
+  return { mois: periode.mois_fin, annee: periode.annee }
+}
+
+/**
+ * Agrège le statut de saisie du mois à partir de toutes les lignes KPI
+ * (évite le piège findFirst qui peut renvoyer une ligne MANQUANTE alors que d'autres sont remplies).
+ */
+export function agregaterStatutSaisieMois(
+  saisies: { statut: string }[],
+  nbKpiAttendus: number
+): string {
+  if (nbKpiAttendus <= 0) return 'SANS_KPI'
+
+  const utiles = saisies.filter((s) => s.statut !== 'MANQUANTE' && s.statut !== 'VERROUILLEE')
+  if (utiles.length === 0) return 'MANQUANTE'
+
+  const set = new Set(utiles.map((s) => s.statut))
+
+  if (set.has('SOUMISE')) return 'SOUMISE'
+  if (set.has('REJETEE')) return 'REJETEE'
+  if (set.has('EN_RETARD')) return 'EN_RETARD'
+  if (set.has('OUVERTE')) return 'OUVERTE'
+
+  const toutesValidees = utiles.every((s) => s.statut === 'VALIDEE' || s.statut === 'AJUSTEE')
+  if (toutesValidees) {
+    // Toutes les lignes non manquantes sont validées ; s'il en manque pour d'autres KPI → encore en cours
+    return utiles.length >= nbKpiAttendus ? 'VALIDEE' : 'OUVERTE'
+  }
+
+  return 'MANQUANTE'
+}
+
 export type ModeAgregation = 'CUMUL' | 'MOYENNE' | 'DERNIER'
 
 export type TypeKpi = 'QUANTITATIF' | 'QUALITATIF' | 'COMPORTEMENTAL'

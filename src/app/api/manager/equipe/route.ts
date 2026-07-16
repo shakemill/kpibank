@@ -3,6 +3,7 @@ import { getSessionAndRequireManager } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { consolidateEmploye } from '@/lib/consolidation'
 import { getCollaborateursAssignables } from '@/lib/assignation-rules'
+import { agregaterStatutSaisieMois, moisRefPourPeriode } from '@/lib/saisie-utils'
 
 function perimetreLabel(role: string): string {
   switch (role) {
@@ -62,13 +63,16 @@ export async function GET(request: NextRequest) {
 
   const periode = await prisma.periode.findUnique({
     where: { id: periodeId },
-    select: { code: true },
+    select: { code: true, mois_debut: true, mois_fin: true, annee: true },
   })
   const periodeCode = periode?.code ?? ''
 
   const now = new Date()
-  const moisCourant = now.getMonth() + 1
-  const anneeCourant = now.getFullYear()
+  const moisCalendaire = now.getMonth() + 1
+  const anneeCalendaire = now.getFullYear()
+  const { mois: moisRef, annee: anneeRef } = periode
+    ? moisRefPourPeriode(periode, moisCalendaire, anneeCalendaire)
+    : { mois: moisCalendaire, annee: anneeCalendaire }
 
   try {
     const collaborateurs = await getCollaborateursAssignables({
@@ -102,23 +106,30 @@ export async function GET(request: NextRequest) {
       } catch {
         // skip
       }
-      const saisie = await prisma.saisieMensuelle.findFirst({
-        where: { employeId: u.id, mois: moisCourant, annee: anneeCourant },
-        select: { statut: true },
-      })
-      let statutSaisieMois = 'MANQUANTE'
-      if (saisie) {
-        if (saisie.statut === 'VALIDEE' || saisie.statut === 'AJUSTEE') statutSaisieMois = 'VALIDEE'
-        else if (saisie.statut === 'SOUMISE') statutSaisieMois = 'SOUMISE'
-        else if (saisie.statut === 'OUVERTE' || saisie.statut === 'EN_RETARD') statutSaisieMois = 'OUVERTE'
-        else statutSaisieMois = saisie.statut
-      }
+
       const kpiEmployes = await prisma.kpiEmploye.findMany({
-        where: { employeId: u.id, periodeId },
-        select: { poids: true },
+        where: {
+          employeId: u.id,
+          periodeId,
+          statut: { in: ['VALIDE', 'CLOTURE', 'NOTIFIE', 'ACCEPTE', 'BROUILLON', 'CONTESTE'] },
+        },
+        select: { id: true, poids: true, statut: true },
       })
+      // KPI attendus pour la saisie : validés / clôturés (comme l’API manquantes)
+      const kpiSaisissables = kpiEmployes.filter((k) => k.statut === 'VALIDE' || k.statut === 'CLOTURE')
       const kpiTotalAssignes = kpiEmployes.length
       const sommePoids = Math.round(kpiEmployes.reduce((s, k) => s + k.poids, 0) * 100) / 100
+
+      const saisies = await prisma.saisieMensuelle.findMany({
+        where: {
+          employeId: u.id,
+          mois: moisRef,
+          annee: anneeRef,
+          kpiEmployeId: { in: kpiSaisissables.map((k) => k.id) },
+        },
+        select: { statut: true },
+      })
+      const statutSaisieMois = agregaterStatutSaisieMois(saisies, kpiSaisissables.length)
 
       employesList.push({
         id: u.id,

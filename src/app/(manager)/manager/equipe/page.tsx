@@ -122,6 +122,8 @@ const STATUT_SAISIE_MAP: Record<string, { label: string; className: string }> = 
   OUVERTE: { label: 'En cours', className: 'bg-orange-500/10 text-orange-700 dark:text-orange-400' },
   MANQUANTE: { label: 'Manquante', className: 'bg-red-500/10 text-red-700 dark:text-red-400' },
   EN_RETARD: { label: 'Manquante', className: 'bg-red-500/10 text-red-700 dark:text-red-400' },
+  SANS_KPI: { label: 'Sans KPI', className: 'bg-muted text-muted-foreground' },
+  REJETEE: { label: 'Rejetée', className: 'bg-red-500/10 text-red-700 dark:text-red-400' },
 }
 
 function kpiAssignesLabel(kpiTotalAssignes: number, sommePoids: number): { text: string; ok: boolean } {

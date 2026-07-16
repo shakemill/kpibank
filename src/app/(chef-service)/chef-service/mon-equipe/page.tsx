@@ -81,6 +81,8 @@ const STATUT_SAISIE_MAP: Record<string, { label: string; className: string }> = 
   MANQUANTE: { label: 'Manquante', className: 'bg-red-500/10 text-red-700 dark:text-red-400' },
   EN_RETARD: { label: 'Manquante', className: 'bg-red-500/10 text-red-700 dark:text-red-400' },
   NON_OUVERTE: { label: 'Non ouverte', className: 'bg-muted text-muted-foreground' },
+  SANS_KPI: { label: 'Sans KPI', className: 'bg-muted text-muted-foreground' },
+  REJETEE: { label: 'Rejetée', className: 'bg-red-500/10 text-red-700 dark:text-red-400' },
 }
 
 import { libellerRole } from '@/lib/role-labels'
