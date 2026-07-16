@@ -871,7 +871,7 @@ export default function DashboardDirecteurPage() {
                       Top 5 performers
                       <Medal className="h-4 w-4 text-amber-500" />
                     </CardTitle>
-                    <CardDescription>Meilleurs scores globaux de la direction</CardDescription>
+                    <CardDescription>Meilleurs scores (≥ 50 %) de la direction</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -879,7 +879,7 @@ export default function DashboardDirecteurPage() {
                 <ul className="space-y-2">
                   {data.top5.map((e, i) => (
                       <li
-                        key={i}
+                        key={`${e.prenom}-${e.nom}-${i}`}
                         className={cn(
                           'flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm',
                           i % 2 === 1 ? 'bg-muted/40' : 'bg-muted/20'
@@ -896,7 +896,9 @@ export default function DashboardDirecteurPage() {
                   ))}
                 </ul>
                 {data.top5.length === 0 && (
-                  <p className="text-muted-foreground text-sm py-4 text-center">Aucune donnée disponible.</p>
+                  <p className="text-muted-foreground text-sm py-4 text-center">
+                    Aucun collaborateur avec un score ≥ 50 % sur cette période.
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -908,8 +910,12 @@ export default function DashboardDirecteurPage() {
                     <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-500" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">5 en difficulté</CardTitle>
-                    <CardDescription>Collaborateurs à accompagner en priorité</CardDescription>
+                    <CardTitle className="text-base">
+                      {data.bottom5.length > 0
+                        ? `${data.bottom5.length} en difficulté`
+                        : 'En difficulté'}
+                    </CardTitle>
+                    <CardDescription>Collaborateurs à accompagner en priorité (&lt; 50 %)</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -917,7 +923,7 @@ export default function DashboardDirecteurPage() {
                 <ul className="space-y-2">
                   {data.bottom5.map((e, i) => (
                     <li
-                      key={i}
+                      key={`${e.prenom}-${e.nom}-${i}`}
                       className={cn(
                         'flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm',
                         i % 2 === 1 ? 'bg-muted/40' : 'bg-muted/20'
@@ -936,7 +942,9 @@ export default function DashboardDirecteurPage() {
                   ))}
                 </ul>
                 {data.bottom5.length === 0 && (
-                  <p className="text-muted-foreground text-sm py-4 text-center">Aucune donnée disponible.</p>
+                  <p className="text-muted-foreground text-sm py-4 text-center">
+                    Aucun collaborateur en difficulté (&lt; 50 %) sur cette période.
+                  </p>
                 )}
               </CardContent>
             </Card>

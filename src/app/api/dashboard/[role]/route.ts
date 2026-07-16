@@ -410,13 +410,27 @@ export async function GET(
         })
         for (const u of employes) {
           const o = scoreByEmploye.get(u.id)
-          const score = o && o.sumPoids > 0 ? o.sumPond / o.sumPoids : 0
-          employeScoresForTop.push({ nom: u.nom, prenom: u.prenom, score })
+          // Exclure les collaborateurs sans consolidation (pas de scorePeriodes) :
+          // un score 0 « sans données » ne doit pas alimenter top ni difficulté.
+          if (!o || o.sumPoids <= 0) continue
+          employeScoresForTop.push({
+            nom: u.nom,
+            prenom: u.prenom,
+            score: o.sumPond / o.sumPoids,
+          })
         }
       }
-      const sorted = [...employeScoresForTop].sort((a, b) => b.score - a.score)
-      const top5 = sorted.slice(0, 5)
-      const bottom5 = sorted.slice(-5).reverse()
+      // Top = meilleurs scores (≥ 50 %, hors Insuffisant). Difficulté = scores < 50 %.
+      // Les deux listes ne se chevauchent jamais.
+      const SEUIL_DIFFICULTE = 50
+      const top5 = [...employeScoresForTop]
+        .filter((e) => e.score >= SEUIL_DIFFICULTE)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+      const bottom5 = [...employeScoresForTop]
+        .filter((e) => e.score < SEUIL_DIFFICULTE)
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 5)
 
       const now = new Date()
       const moisCourant = now.getMonth() + 1
