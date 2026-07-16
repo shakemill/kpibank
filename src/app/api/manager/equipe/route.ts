@@ -108,27 +108,27 @@ export async function GET(request: NextRequest) {
       }
 
       const kpiEmployes = await prisma.kpiEmploye.findMany({
-        where: {
-          employeId: u.id,
-          periodeId,
-          statut: { in: ['VALIDE', 'CLOTURE', 'NOTIFIE', 'ACCEPTE', 'BROUILLON', 'CONTESTE'] },
-        },
+        where: { employeId: u.id, periodeId },
         select: { id: true, poids: true, statut: true },
       })
       // KPI attendus pour la saisie : validés / clôturés (comme l’API manquantes)
       const kpiSaisissables = kpiEmployes.filter((k) => k.statut === 'VALIDE' || k.statut === 'CLOTURE')
       const kpiTotalAssignes = kpiEmployes.length
       const sommePoids = Math.round(kpiEmployes.reduce((s, k) => s + k.poids, 0) * 100) / 100
+      const kpiIds = kpiSaisissables.map((k) => k.id)
 
-      const saisies = await prisma.saisieMensuelle.findMany({
-        where: {
-          employeId: u.id,
-          mois: moisRef,
-          annee: anneeRef,
-          kpiEmployeId: { in: kpiSaisissables.map((k) => k.id) },
-        },
-        select: { statut: true },
-      })
+      const saisies =
+        kpiIds.length === 0
+          ? []
+          : await prisma.saisieMensuelle.findMany({
+              where: {
+                employeId: u.id,
+                mois: moisRef,
+                annee: anneeRef,
+                kpiEmployeId: { in: kpiIds },
+              },
+              select: { statut: true },
+            })
       const statutSaisieMois = agregaterStatutSaisieMois(saisies, kpiSaisissables.length)
 
       employesList.push({
