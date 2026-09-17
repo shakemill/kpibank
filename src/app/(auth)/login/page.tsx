@@ -86,7 +86,7 @@ function LoginForm() {
           <div className="space-y-6">
             <div className="space-y-2">
               <h2 className="text-4xl font-bold leading-tight">
-                Système de Gestion des KPI du Capital Humain
+                Outil de Gestion de la Performance
               </h2>
               <p className="text-lg text-white/80 max-w-md">
                 Suivez et mesurez vos indicateurs en temps réel pour atteindre vos objectifs.
@@ -133,7 +133,7 @@ function LoginForm() {
                 priority
               />
             </div>
-            <p className="text-sm text-gray-600">Système de Gestion des KPI du Capital Humain</p>
+            <p className="text-sm text-gray-600">Outil de Gestion de la Performance</p>
           </div>
 
           <div className="space-y-2">
@@ -235,7 +235,7 @@ function LoginForm() {
           </Form>
 
           <p className="text-center text-xs text-gray-500">
-            © 2026 Système de Gestion des KPI du Capital Humain. Tous droits réservés.
+            © 2026 Outil de Gestion de la Performance. Tous droits réservés.
           </p>
         </div>
       </div>

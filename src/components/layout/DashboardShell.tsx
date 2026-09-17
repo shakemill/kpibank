@@ -86,7 +86,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </Button>
 
           <div className="flex-1 lg:ml-0 ml-4">
-            <h2 className="text-lg font-semibold text-foreground">Système de Gestion des KPI du Capital Humain</h2>
+            <h2 className="text-lg font-semibold text-foreground">Outil de Gestion de la Performance</h2>
           </div>
 
           <ClientOnly
