@@ -155,7 +155,7 @@ export default function AdminSauvegardePage() {
             <div className="min-w-0">
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sauvegarde &amp; Export</h1>
               <p className="text-sm text-muted-foreground">
-                Dump SQL de toutes les tables PostgreSQL — les {keep} plus récentes sont conservées sur le serveur
+                Dump SQL complet (CREATE TABLE + données) — les {keep} plus récentes sont conservées sur le serveur
               </p>
             </div>
           </div>
@@ -171,8 +171,9 @@ export default function AdminSauvegardePage() {
           <CardTitle className="text-base">Historique</CardTitle>
           <CardDescription>
             Téléchargez le fichier .sql puis exécutez-le dans Postico (Query) ou via
-            <code className="text-xs">psql -f fichier.sql</code>. En production, montez un volume
-            persistant sur le répertoire de sauvegarde.
+            <code className="text-xs">psql -f fichier.sql</code>. Les tables, enums et
+            séquences sont recréés (base vide ou existante). En production, montez un volume
+            persistant.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
