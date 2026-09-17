@@ -106,7 +106,7 @@ export default function AdminSauvegardePage() {
       }
       toast({
         title: 'Sauvegarde créée',
-        description: `${data.filename} — ${formatBytes(data.size ?? 0)}`,
+        description: `${data.filename} — ${Object.keys(data.tableCounts ?? {}).length} tables — ${formatBytes(data.size ?? 0)}`,
       })
       await fetchBackups()
       if (typeof data.filename === 'string') {
@@ -155,7 +155,7 @@ export default function AdminSauvegardePage() {
             <div className="min-w-0">
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sauvegarde &amp; Export</h1>
               <p className="text-sm text-muted-foreground">
-                Dump JSON compressé de la base — les {keep} plus récentes sont conservées sur le serveur
+                Dump JSON compressé de toutes les tables PostgreSQL — les {keep} plus récentes sont conservées sur le serveur
               </p>
             </div>
           </div>

@@ -15,10 +15,9 @@ async function main() {
   console.log(`Taille     : ${created.size} octets`)
   console.log(`Rétention  : ${getBackupKeep()} fichier(s)`)
   const counts = Object.entries(created.tableCounts)
-    .filter(([, n]) => n > 0)
     .map(([name, n]) => `${name}=${n}`)
     .join(', ')
-  if (counts) console.log(`Tables     : ${counts}`)
+  console.log(`Tables (${Object.keys(created.tableCounts).length}) : ${counts}`)
 }
 
 main().catch((e) => {

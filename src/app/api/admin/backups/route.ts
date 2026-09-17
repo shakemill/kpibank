@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       action: AuditAction.BACKUP_CREATE,
       entityType: 'Backup',
       entityId: created.filename,
-      details: `Taille ${created.size} octets`,
+      details: `${Object.keys(created.tableCounts).length} tables, ${created.size} octets`,
     })
     return apiSuccess(created, 201)
   } catch (e) {
