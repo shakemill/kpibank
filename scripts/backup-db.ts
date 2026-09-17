@@ -1,5 +1,5 @@
 /**
- * Crée une sauvegarde JSON gzip de la base (même format que l’espace admin).
+ * Crée une sauvegarde SQL de la base (même format que l’espace admin).
  * Usage: pnpm backup:db
  */
 import { config } from 'dotenv'

@@ -155,7 +155,7 @@ export default function AdminSauvegardePage() {
             <div className="min-w-0">
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Sauvegarde &amp; Export</h1>
               <p className="text-sm text-muted-foreground">
-                Dump JSON compressé de toutes les tables PostgreSQL — les {keep} plus récentes sont conservées sur le serveur
+                Dump SQL de toutes les tables PostgreSQL — les {keep} plus récentes sont conservées sur le serveur
               </p>
             </div>
           </div>
@@ -170,8 +170,9 @@ export default function AdminSauvegardePage() {
         <CardHeader className="gap-1 border-b border-border/50 bg-gradient-to-b from-muted/40 to-muted/10 pb-4">
           <CardTitle className="text-base">Historique</CardTitle>
           <CardDescription>
-            Téléchargez un fichier existant. En production, montez un volume persistant sur le
-            répertoire de sauvegarde pour le conserver après un redéploiement.
+            Téléchargez le fichier .sql puis exécutez-le dans Postico (Query) ou via
+            <code className="text-xs">psql -f fichier.sql</code>. En production, montez un volume
+            persistant sur le répertoire de sauvegarde.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">

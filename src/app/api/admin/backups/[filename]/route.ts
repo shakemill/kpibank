@@ -28,7 +28,9 @@ export async function GET(
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
-        'Content-Type': 'application/gzip',
+        'Content-Type': filename.endsWith('.sql')
+          ? 'application/sql; charset=utf-8'
+          : 'application/gzip',
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Content-Length': String(buffer.length),
         'Cache-Control': 'no-store',

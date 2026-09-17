@@ -1,16 +1,17 @@
 /**
- * Sauvegarde JSON gzip de toutes les tables PostgreSQL (schéma public).
+ * Sauvegarde SQL de toutes les tables PostgreSQL (schéma public).
+ * Fichier .sql importable dans Postico / psql.
  */
 
-import { gzipSync } from 'zlib'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { Pool } from 'pg'
 
-export const BACKUP_FORMAT_VERSION = 2
-export const BACKUP_FILENAME_RE = /^kpi-banque-\d{8}-\d{6}\.json\.gz$/
+export const BACKUP_FORMAT_VERSION = 3
+export const BACKUP_FILENAME_RE = /^kpi-banque-\d{8}-\d{6}\.(sql|json\.gz)$/
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://localhost:5432/kpi_banque'
+const INSERT_BATCH = 80
 
 export type BackupFileInfo = {
   filename: string
@@ -24,24 +25,28 @@ export type BackupCreated = BackupFileInfo & {
 
 function quoteIdent(name: string): string {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-    throw new Error(`Nom de table invalide: ${name}`)
+    throw new Error(`Nom d'identifiant invalide: ${name}`)
   }
   return `"${name.replaceAll('"', '""')}"`
 }
 
-function serializeValue(value: unknown): unknown {
-  if (value instanceof Date) return value.toISOString()
-  if (typeof value === 'bigint') return value.toString()
-  if (Buffer.isBuffer(value)) return { $bytes: value.toString('base64') }
-  return value
+function sqlString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
 }
 
-function serializeRow(row: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(row)) {
-    out[key] = serializeValue(value)
+function sqlLiteral(value: unknown): string {
+  if (value === null || value === undefined) return 'NULL'
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'NULL'
+  if (typeof value === 'bigint') return value.toString()
+  if (value instanceof Date) return `${sqlString(value.toISOString())}::timestamptz`
+  if (Buffer.isBuffer(value)) return `E'\\\\x${value.toString('hex')}'`
+  if (Array.isArray(value)) {
+    if (value.length === 0) return `'{}'`
+    return `ARRAY[${value.map(sqlLiteral).join(', ')}]`
   }
-  return out
+  if (typeof value === 'object') return `${sqlString(JSON.stringify(value))}::jsonb`
+  return sqlString(String(value))
 }
 
 export function getBackupDir(): string {
@@ -68,7 +73,7 @@ export function makeBackupFilename(date = new Date()): string {
   const h = pad2(date.getHours())
   const min = pad2(date.getMinutes())
   const s = pad2(date.getSeconds())
-  return `kpi-banque-${y}${m}${d}-${h}${min}${s}.json.gz`
+  return `kpi-banque-${y}${m}${d}-${h}${min}${s}.sql`
 }
 
 export function resolveBackupPath(filename: string): string {
@@ -83,8 +88,67 @@ export function resolveBackupPath(filename: string): string {
   return resolved
 }
 
+function buildInsertSql(table: string, rows: Record<string, unknown>[]): string {
+  if (rows.length === 0) return `-- ${table}: 0 ligne\n`
+  const columns = Object.keys(rows[0])
+  const quotedCols = columns.map(quoteIdent).join(', ')
+  const quotedTable = quoteIdent(table)
+  const chunks: string[] = [`-- ${table}: ${rows.length} ligne(s)\n`]
+  for (let i = 0; i < rows.length; i += INSERT_BATCH) {
+    const batch = rows.slice(i, i + INSERT_BATCH)
+    const values = batch
+      .map((row) => `(${columns.map((col) => sqlLiteral(row[col])).join(', ')})`)
+      .join(',\n  ')
+    chunks.push(`INSERT INTO ${quotedTable} (${quotedCols}) VALUES\n  ${values};\n`)
+  }
+  return chunks.join('\n')
+}
+
+function buildSqlDump(input: {
+  createdAt: string
+  tables: Record<string, Record<string, unknown>[]>
+  sequences: { name: string; lastValue: string | null }[]
+}): string {
+  const tableNames = Object.keys(input.tables)
+  const lines: string[] = [
+    `-- Sauvegarde KPI Banque`,
+    `-- Format v${BACKUP_FORMAT_VERSION} — ${input.createdAt}`,
+    `-- Restauration (Postico : Query → coller / exécuter, ou : psql -d NOM_BASE -f ce-fichier.sql)`,
+    `-- ATTENTION : écrase les données existantes des tables listées.`,
+    ``,
+    `BEGIN;`,
+    `SET session_replication_role = replica;`,
+    ``,
+  ]
+
+  if (tableNames.length > 0) {
+    lines.push(
+      `TRUNCATE TABLE ${tableNames.map(quoteIdent).join(', ')} RESTART IDENTITY CASCADE;`,
+      ``
+    )
+  }
+
+  for (const name of tableNames) {
+    lines.push(buildInsertSql(name, input.tables[name]))
+  }
+
+  if (input.sequences.length > 0) {
+    lines.push(`-- Séquences`)
+    for (const seq of input.sequences) {
+      if (seq.lastValue == null) continue
+      lines.push(
+        `SELECT setval(${quoteIdent(seq.name)}::regclass, ${seq.lastValue}, true);`
+      )
+    }
+    lines.push(``)
+  }
+
+  lines.push(`SET session_replication_role = DEFAULT;`, `COMMIT;`, ``)
+  return lines.join('\n')
+}
+
 async function dumpAllPublicTables(): Promise<{
-  tables: Record<string, unknown[]>
+  tables: Record<string, Record<string, unknown>[]>
   tableCounts: Record<string, number>
   sequences: { name: string; lastValue: string | null }[]
 }> {
@@ -97,11 +161,11 @@ async function dumpAllPublicTables(): Promise<{
        ORDER BY tablename`
     )
 
-    const tables: Record<string, unknown[]> = {}
+    const tables: Record<string, Record<string, unknown>[]> = {}
     const tableCounts: Record<string, number> = {}
     for (const { tablename } of tableRows) {
       const { rows } = await pool.query(`SELECT * FROM ${quoteIdent(tablename)}`)
-      tables[tablename] = rows.map((row) => serializeRow(row as Record<string, unknown>))
+      tables[tablename] = rows as Record<string, unknown>[]
       tableCounts[tablename] = rows.length
     }
 
@@ -163,14 +227,12 @@ export async function createBackup(): Promise<BackupCreated> {
   }
 
   const { tables, tableCounts, sequences } = await dumpAllPublicTables()
-  const payload = {
-    version: BACKUP_FORMAT_VERSION,
+  const sql = buildSqlDump({
     createdAt: new Date().toISOString(),
     tables,
     sequences,
-  }
-  const gz = gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'))
-  await fs.writeFile(filePath, gz)
+  })
+  await fs.writeFile(filePath, sql, 'utf8')
   await pruneOldBackups()
 
   const st = await fs.stat(filePath)
