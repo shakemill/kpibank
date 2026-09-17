@@ -30,7 +30,8 @@
     "seed-catalogue-descriptions": "tsx prisma/scripts/seed-catalogue-descriptions.ts",
     "import:repertoire-kpi-2026": "tsx prisma/scripts/import-repertoire-kpi-2026.ts",
     "import:personnel-bgfi-2026": "tsx prisma/scripts/import-personnel-bgfi-2026.ts",
-    "saisies-dates-fevrier": "tsx prisma/scripts/saisies-dates-fevrier.ts"
+    "saisies-dates-fevrier": "tsx prisma/scripts/saisies-dates-fevrier.ts",
+    "backup:db": "tsx scripts/backup-db.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

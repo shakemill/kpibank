@@ -39,6 +39,9 @@ export const AuditAction = {
   AUTH_LOGIN_SUCCESS: 'AUTH_LOGIN_SUCCESS',
   AUTH_LOGIN_FAIL: 'AUTH_LOGIN_FAIL',
   PASSWORD_CHANGE: 'PASSWORD_CHANGE',
+
+  BACKUP_CREATE: 'BACKUP_CREATE',
+  BACKUP_DOWNLOAD: 'BACKUP_DOWNLOAD',
 } as const
 
 export type AuditActionCode = (typeof AuditAction)[keyof typeof AuditAction]
@@ -82,6 +85,9 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   AUTH_LOGIN_SUCCESS: 'Connexion réussie',
   AUTH_LOGIN_FAIL: 'Échec de connexion',
   PASSWORD_CHANGE: 'Changement de mot de passe',
+
+  BACKUP_CREATE: 'Création sauvegarde',
+  BACKUP_DOWNLOAD: 'Téléchargement sauvegarde',
 }
 
 export function libellerActionAudit(action: string): string {

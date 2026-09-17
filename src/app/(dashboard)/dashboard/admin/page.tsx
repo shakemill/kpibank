@@ -185,6 +185,8 @@ export default function AdminPage() {
       router.push('/catalogue-kpi')
     } else if (sectionTitle === 'Grille de notation') {
       router.push('/dashboard/admin/grille-notation')
+    } else if (sectionTitle === 'Sauvegarde & Export') {
+      router.push('/dashboard/admin/sauvegarde')
     } else if (sectionTitle === 'Audit & Logs') {
       router.push('/dashboard/admin/audit-logs')
     }

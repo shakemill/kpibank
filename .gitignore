@@ -34,3 +34,7 @@ next-env.d.ts
 # fichiers joints (preuves saisie)
 /public/uploads/preuves/**
 !/public/uploads/preuves/.gitkeep
+
+# sauvegardes base (volume persistant en prod)
+/data/backups/**
+!/data/backups/.gitkeep
